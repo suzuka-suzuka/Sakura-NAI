@@ -1,13 +1,9 @@
 # .github/workflows/publish.yml
 # 
-# Standard Publish Workflow for Nya Foundation
+# Manual container publishing workflow for Sakura NAI.
 # 
-# This workflow handles the full CI/CD pipeline for Foundation:
-# 1. Runs tests and checks
-# 2. Uses semantic-release to automatically version the project based on commit messages
-# 3. Publishes the package to PyPI
-# 4. Builds and pushes Docker images to both Docker Hub and GitHub Container Registry
-# 5. Creates GitHub releases with changelog
+# Builds and pushes Docker images to Docker Hub and GitHub Container Registry.
+# Configure the destination registries in this repository before running it.
 #
 # Required Secrets:
 # - CI_APP_ID: GitHub App ID for token generation
@@ -16,8 +12,8 @@
 # - DOCKERHUB_TOKEN: Access token for Docker Hub (not password)
 #
 # Optional Variables (set in repository variables):
-# - GCR_IMAGE_NAME: Image name for GitHub Container Registry (example: nya-foundation/nya-proxy)
-# - DOCKERHUB_IMAGE_NAME: Image name for Docker Hub (example: k3scat/nya-proxy)
+# - GCR_IMAGE_NAME: Image name for GitHub Container Registry (owner/sakura-nai-web)
+# - DOCKERHUB_IMAGE_NAME: Image name for Docker Hub (owner/sakura-nai-web)
 #
 # Permissions needed:
 # - contents: write (for creating GitHub releases)
@@ -135,10 +131,10 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         labels: |
-          org.opencontainers.image.title=NyaNovel
-          org.opencontainers.image.description=A front-end only client for NovelAI's image generation, built with TailwindCSS, and Alpine.js.
-          org.opencontainers.image.url=https://github.com/Nya-Foundation/NyaNovel
-          org.opencontainers.image.source=https://github.com/Nya-Foundation/NyaNovel
+          org.opencontainers.image.title=Sakura NAI
+          org.opencontainers.image.description=A cherry blossom themed NovelAI image studio built with Next.js and React.
+          org.opencontainers.image.url=https://github.com/${{ github.repository }}
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}
           org.opencontainers.image.version=latest
           org.opencontainers.image.created=${{ github.event.repository.updated_at }}
           org.opencontainers.image.revision=${{ github.sha }}

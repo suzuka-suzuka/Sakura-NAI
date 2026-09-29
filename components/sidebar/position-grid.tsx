@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -15,12 +16,15 @@ export function PositionGrid({
   center,
   onChange,
   label,
+  step = 0.05,
 }: {
   center: { x: number; y: number };
   onChange: (c: { x: number; y: number }) => void;
   /** Distinguishes one character's pad from the next for screen readers. */
   label: string;
+  step?: number;
 }) {
+  useLocale();
   const ref = useRef<HTMLDivElement>(null);
 
   const pick = (clientX: number, clientY: number) => {
@@ -32,9 +36,7 @@ export function PositionGrid({
     onChange({ x: round(x), y: round(y) });
   };
 
-  // Both paths round to the same 0.05 grid the 20% background lines already imply — the pointer
-  // path used to round to 0.01, so the visible gridlines were decorative rather than honest.
-  const round = (v: number) => Math.round(v * 20) / 20;
+  const round = (v: number) => Number((Math.round(v / step) * step).toFixed(3));
   const pct = (v: number) => `${Math.round(v * 100)}%`;
 
   return (
@@ -67,10 +69,10 @@ export function PositionGrid({
         className="sr-only"
         min={0}
         max={1}
-        step={0.05}
+        step={step}
         value={center.x}
-        aria-label="Horizontal position"
-        aria-valuetext={`${pct(center.x)} from left`}
+        aria-label={translateUI("Horizontal position")}
+        aria-valuetext={translateUI("{0} from left", pct(center.x))}
         onChange={(e) => onChange({ ...center, x: Number(e.target.value) })}
       />
       <input
@@ -78,10 +80,10 @@ export function PositionGrid({
         className="sr-only"
         min={0}
         max={1}
-        step={0.05}
+        step={step}
         value={center.y}
-        aria-label="Vertical position"
-        aria-valuetext={`${pct(center.y)} from top`}
+        aria-label={translateUI("Vertical position")}
+        aria-valuetext={translateUI("{0} from top", pct(center.y))}
         onChange={(e) => onChange({ ...center, y: Number(e.target.value) })}
       />
       <div

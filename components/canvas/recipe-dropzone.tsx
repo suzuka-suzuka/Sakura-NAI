@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { FileImage } from "lucide-react";
@@ -20,6 +21,7 @@ function isFileDrag(e: DragEvent) {
  * overlay is only *drawn* over the canvas, so the invitation still points at the centre.
  */
 export function RecipeDropzone() {
+  useLocale();
   const [active, setActive] = useState(false);
   const reduced = usePrefersReducedMotion();
 
@@ -95,11 +97,9 @@ export function RecipeDropzone() {
             </motion.span>
             <div>
               <p className="font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-0.01em] text-fg">
-                Drop to load this recipe
-              </p>
+                {translateUI(" Drop to load this recipe ")}</p>
               <p className="mt-1 max-w-xs text-[12.5px] text-muted">
-                A NovelAI PNG restores its prompt, seed, model, and sampling into the composer.
-              </p>
+                {translateUI(" A NovelAI PNG restores its prompt, seed, model, and sampling into the composer. ")}</p>
             </div>
           </motion.div>
         </motion.div>

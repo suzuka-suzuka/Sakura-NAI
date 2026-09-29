@@ -1,11 +1,50 @@
 @import "tailwindcss";
 
+/* Size each notification to its contents while keeping long messages inside the viewport. */
+.nai-toaster[data-sonner-toaster] {
+  left: auto;
+  width: min(28rem, calc(100vw - var(--offset-left) - var(--offset-right)));
+}
+
+.nai-toaster[data-sonner-toaster] [data-sonner-toast] {
+  left: auto;
+  right: 0;
+  width: max-content;
+  max-width: 100%;
+  gap: 12px;
+}
+
+.nai-toaster[data-sonner-toaster] [data-content] {
+  min-width: 0;
+}
+
+.nai-toaster[data-sonner-toaster] [data-button] {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .nai-toaster[data-sonner-toaster] {
+    width: min(28rem, calc(100vw - var(--mobile-offset-left) - var(--mobile-offset-right)));
+  }
+}
+
+/* Bottom notifications stay above image actions even during entry/exit animations. */
+.nai-toaster[data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"][data-mounted="false"],
+.nai-toaster[data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"][data-removed="true"][data-swipe-out="false"] {
+  --y: translateY(-8px);
+}
+
+.nai-toaster[data-sonner-toaster] [data-sonner-toast][data-mounted="false"],
+.nai-toaster[data-sonner-toaster] [data-sonner-toast][data-removed="true"] {
+  pointer-events: none;
+}
+
 /* Prose in docs/ isn't markup — scanning it makes Tailwind try to compile class names quoted
    inside design notes (e.g. `rounded-[var(--radius-*)]`) and emit invalid CSS. */
 @source not "../docs";
 
 /* ============================================================
-   NyaNovel — design tokens (inherited from the latent.moe system)
+   Sakura NAI — cherry blossom and warm plum design tokens
    Tailwind v4: CSS variables mapped to Tailwind tokens.
    Theme flips via data-mode / data-accent on <html>.
    ============================================================ */
@@ -51,9 +90,9 @@
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   /* radii */
   --radius-chip: 8px;
-  --radius-input: 10px;
-  --radius-button: 10px;
-  --radius-card: 14px;
+  --radius-input: 5px;
+  --radius-button: 5px;
+  --radius-card: 5px;
   --radius-card-lg: 16px;
   --radius-pill: 999px;
 }
@@ -61,18 +100,17 @@
 /* ---- DARK (default) ---- */
 :root,
 [data-mode="dark"] {
-  --bg: oklch(0.145 0.006 265);
-  --surface: oklch(0.185 0.008 265);
-  --surface-2: oklch(0.225 0.01 265);
-  --surface-3: oklch(0.265 0.012 265);
-  --border: oklch(0.285 0.011 265);
-  --border-soft: oklch(0.235 0.009 265);
-  --fg: oklch(0.965 0.003 265);
-  --fg-2: oklch(0.8 0.008 265);
-  --muted: oklch(0.62 0.014 265);
-  /* Latent Frame: Signal Coral is the product's default load-bearing colour. */
-  --accent: #f35f52;
-  --on-accent: #171719;
+  --bg: #15121b;
+  --surface: #201b27;
+  --surface-2: #292130;
+  --surface-3: #352a3c;
+  --border: #514052;
+  --border-soft: #382d40;
+  --fg: #fff3f7;
+  --fg-2: #dacbd5;
+  --muted: #b19aaa;
+  --accent: #f3a5bd;
+  --on-accent: #321823;
   --danger: oklch(0.7 0.16 25);
   --danger-bg: oklch(0.55 0.19 25);
   --ok: oklch(0.74 0.13 160);
@@ -92,17 +130,17 @@
 
 /* ---- LIGHT ---- */
 [data-mode="light"] {
-  --bg: oklch(0.985 0.0015 265);
-  --surface: oklch(1 0 0);
-  --surface-2: oklch(0.972 0.003 265);
-  --surface-3: oklch(0.955 0.004 265);
-  --border: oklch(0.905 0.006 265);
-  --border-soft: oklch(0.935 0.005 265);
-  --fg: oklch(0.215 0.013 265);
-  --fg-2: oklch(0.4 0.013 265);
-  --muted: oklch(0.52 0.014 265);
-  --accent: #f35f52;
-  --on-accent: #171719;
+  --bg: #fff8fb;
+  --surface: #ffffff;
+  --surface-2: #fff0f6;
+  --surface-3: #fbe5ee;
+  --border: #e5cbd6;
+  --border-soft: #efdee5;
+  --fg: #382432;
+  --fg-2: #644553;
+  --muted: #826372;
+  --accent: #a93867;
+  --on-accent: #fff7fb;
   /* Status colors: the dark defaults (L 0.7-0.8) sit at ~2:1 on the near-white light bg, so they
      must be re-darkened here to clear WCAG AA for text/icons. --danger-bg stays saturated (it backs
      white text on badges). */
@@ -116,10 +154,10 @@
   --cat-character: oklch(0.48 0.13 162);
   --cat-meta: oklch(0.52 0.13 80);
   --cat-lora: oklch(0.55 0.18 290);
-  /* elevation (light: soft cool-tinted shadows) */
-  --shadow-card: 0 1px 2px rgba(30, 41, 59, 0.06), 0 2px 8px -3px rgba(30, 41, 59, 0.1);
-  --shadow-panel: 0 8px 30px -14px rgba(30, 41, 59, 0.18);
-  --shadow-pop: 0 24px 60px -16px rgba(30, 41, 59, 0.22), 0 2px 8px -2px rgba(30, 41, 59, 0.1);
+  /* elevation (light: soft rose-tinted shadows) */
+  --shadow-card: 0 1px 2px rgba(76, 37, 56, 0.06), 0 2px 8px -3px rgba(76, 37, 56, 0.1);
+  --shadow-panel: 0 8px 30px -14px rgba(76, 37, 56, 0.18);
+  --shadow-pop: 0 24px 60px -16px rgba(76, 37, 56, 0.22), 0 2px 8px -2px rgba(76, 37, 56, 0.1);
   --glow-accent: 0 8px 24px -8px color-mix(in oklab, var(--accent) 45%, transparent);
 }
 
@@ -139,11 +177,12 @@
   html {
     background: var(--bg);
     color: var(--fg);
-    scrollbar-gutter: stable;
+    scrollbar-gutter: auto;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
   body { font-family: var(--font-sans); }
+  * { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
   ::selection { background: var(--accent); color: var(--on-accent); }
 }
 
@@ -157,6 +196,16 @@
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes shimmer { 0% { background-position: -460px 0; } 100% { background-position: 460px 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes generationSweep { from { transform: translateX(-100%); } to { transform: translateX(334%); } }
+.generation-sweep { animation: generationSweep 1.6s linear infinite; }
+.nai-workspace { background: var(--bg); }
+.nai-workspace section[aria-busy] { background: var(--bg); }
+[data-mode="light"] .nai-workspace, [data-mode="light"] .nai-workspace section[aria-busy] { background: var(--bg); }
+.nai-range { appearance: none; height: 10px; border-radius: 3px; background: var(--bg); border: 1px solid var(--border-soft); }
+.nai-range::-webkit-slider-thumb { appearance: none; width: 16px; height: 26px; border-radius: 3px; background: var(--surface-3); border: 1px solid var(--border); cursor: ew-resize; }
+.nai-range::-moz-range-thumb { width: 16px; height: 26px; border-radius: 3px; background: var(--surface-3); border: 1px solid var(--border); cursor: ew-resize; }
+.nai-range:focus-visible { outline: 2px solid var(--accent); }
+.checkerboard { background-color: #aaa; background-image: linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%); background-size: 20px 20px; background-position: 0 0,0 10px,10px -10px,-10px 0; }
 
 /* Reduced motion. `.motion-keep` opts an element out entirely — it marks the indicators whose whole
    job is to prove the app is still working (spinners, the streaming shimmer); freezing those makes

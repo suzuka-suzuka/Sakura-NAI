@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useRef } from "react";
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
@@ -17,6 +18,7 @@ export function ReferenceUploader({
   field: "vibe" | "directorReference";
   emptyLabel: string;
 }) {
+  useLocale();
   const refs = useStore((s) => s.settings[field]);
   const add = useStore((s) => s.addReference);
   const update = useStore((s) => s.updateReference);
@@ -31,7 +33,7 @@ export function ReferenceUploader({
         add(field, { base64, preview, strength: 0.6, informationExtracted: 1.0 });
       } catch (e) {
         console.error(e);
-        toast.error(`Couldn't read ${file.name}`);
+        toast.error(translateUI("Couldn't read {0}", file.name));
       }
     }
     if (inputRef.current) inputRef.current.value = "";
@@ -48,8 +50,7 @@ export function ReferenceUploader({
         onChange={(e) => onFiles(e.target.files)}
       />
       <Button variant="outline" size="sm" className="w-full" onClick={() => inputRef.current?.click()}>
-        <Upload className="size-4" /> Add reference image
-      </Button>
+        <Upload className="size-4" /> {translateUI(" Add reference image ")}</Button>
 
       {refs.length === 0 ? (
         <p className="mt-2 text-center text-[12px] text-muted">{emptyLabel}</p>
@@ -65,7 +66,7 @@ export function ReferenceUploader({
               />
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <Slider
-                  label="Strength"
+                  label={translateUI("Strength")}
                   min={0}
                   max={1}
                   step={0.05}
@@ -74,7 +75,7 @@ export function ReferenceUploader({
                   format={(v) => v.toFixed(2)}
                 />
                 <Slider
-                  label="Info extracted"
+                  label={translateUI("Info extracted")}
                   min={0}
                   max={1}
                   step={0.05}
@@ -84,7 +85,7 @@ export function ReferenceUploader({
                 />
               </div>
               <IconButton
-                label="Remove reference"
+                label={translateUI("Remove reference")}
                 size="sm"
                 variant="subtle"
                 onClick={() => remove(field, i)}

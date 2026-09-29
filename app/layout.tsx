@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { fontVars } from "@/lib/fonts";
 import { AppToaster } from "@/components/app-toaster";
-import brandIcon from "@/assets/brand/icon-512.png";
-import socialBanner from "@/assets/brand/github-social-banner.png";
+import brandIcon from "@/assets/brand/sakura-icon.png";
+import socialBanner from "@/assets/brand/sakura-banner.png";
 import "./globals.css";
 
 function firstHeaderValue(value: string | null) {
@@ -39,27 +39,27 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase,
     title: {
-      default: "NyaNovel — AI image generation",
-      template: "%s · NyaNovel",
+      default: "Sakura NAI · 让灵感如樱花绽放",
+      template: "%s · Sakura NAI",
     },
     description:
-      "A fast, refined browser client for NovelAI image generation — prompts, characters, vibe transfer, director tools and a local gallery.",
-    applicationName: "NyaNovel",
+      "樱花主题的 NovelAI 绘图工作台，支持 V5、角色提示词、流式预览与本地图库，让每一份灵感都有落点。",
+    applicationName: "Sakura NAI",
     icons: {
       icon: [{ url: brandIcon.src, type: "image/png", sizes: "512x512" }],
       apple: [{ url: brandIcon.src, type: "image/png", sizes: "512x512" }],
     },
     openGraph: {
       type: "website",
-      siteName: "NyaNovel",
-      title: "NyaNovel — AI image generation, refined",
-      description: "Fast controls, live streaming, and local-first privacy for NovelAI image generation.",
-      images: [{ url: socialBanner.src, width: 1280, height: 640, alt: "NyaNovel — AI image generation, refined" }],
+      siteName: "Sakura NAI",
+      title: "Sakura NAI · 让灵感如樱花绽放",
+      description: "樱花主题的 NovelAI 绘图工作台：提示词、角色、画布与本地图库。",
+      images: [{ url: socialBanner.src, width: 1280, height: 640, alt: "Sakura NAI — Your ideas, in full bloom." }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "NyaNovel — AI image generation, refined",
-      description: "Fast controls, live streaming, and local-first privacy for NovelAI image generation.",
+      title: "Sakura NAI · 让灵感如樱花绽放",
+      description: "樱花主题的 NovelAI 绘图工作台：提示词、角色、画布与本地图库。",
       images: [socialBanner.src],
     },
   };
@@ -75,7 +75,7 @@ const THEME_NO_FLASH = `
     var m = localStorage.getItem("nya-mode") || "dark";
     var a = localStorage.getItem("nya-accent");
     d.setAttribute("data-mode", m);
-    if (a) d.setAttribute("data-accent", a);
+    if (a && a !== "coral") d.setAttribute("data-accent", a);
   } catch (e) {}
 })();
 `;

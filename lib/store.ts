@@ -1,5 +1,10 @@
 "use client";
 
+import { translateUI } from "@/lib/i18n";
+import { pixelSnap } from "@/lib/pixel-snap";
+import { base64ToBytes, Image as NaiImage } from "@/lib/nai/protocol";
+import { buildPayload } from "@/lib/nai/payload";
+import { DEFAULT_PREFERENCES, loadGenerationPreferences, saveGenerationPreferences, estimateCost, type AccountInfo, type GenerationPreferences } from "@/lib/nai/cost";
 import { create } from "zustand";
 import { toast } from "sonner";
 import {
@@ -16,8 +21,9 @@ import {
   type ConnectionConfig,
 } from "@/lib/nai/client";
 import { DEFAULT_SETTINGS, type GenerationSettings, type ReferenceImage, type CharacterSetting } from "@/lib/nai/types";
-import { isV4Model } from "@/lib/nai/models";
-import type { EmotionOptions, Image } from "nekoai-js";
+import { supportsStreaming, isV5Model, maxSamples } from "@/lib/nai/models";
+import { CHARACTER_STARTERS, type CharacterKind } from "@/lib/nai/characters";
+import type { EmotionOptions, Image } from "@/lib/nai/protocol";
 import {
   loadImages,
   saveImage,
@@ -26,7 +32,7 @@ import {
   type GalleryImage,
 } from "@/lib/db/gallery";
 
-export type SettingsTab = "basic" | "advanced" | "characters";
+export type SettingsTab = "basic" | "advanced";
 
 type RestoreSettingsOptions = {
   message?: string;
@@ -52,9 +58,10 @@ export type DirectorKind =
   | "colorize"
   | "emotion"
   | "upscale"
+  | "pixelSnap"
   | "enhance";
 
-export type DirectorOpts = { prompt?: string; defry?: number; emotion?: EmotionOptions; level?: number };
+export type DirectorOpts = { prompt?: string; defry?: number; emotion?: EmotionOptions; level?: number; source?: GalleryImage; colors?: number; conservative?: boolean; upscale?: boolean; scale?: 2 | 4 };
 
 type Store = {
   // ---- connection ----
@@ -70,9 +77,10 @@ type Store = {
   patchSettings: (patch: Partial<GenerationSettings>) => void;
   resetSettings: () => void;
   restoreSettings: (s: GenerationSettings, options?: RestoreSettingsOptions) => void;
-  addCharacter: () => void;
+  addCharacter: (kind?: CharacterKind) => void;
   updateCharacter: (i: number, patch: Partial<CharacterSetting>) => void;
   removeCharacter: (i: number) => void;
+  moveCharacter: (from: number, to: number) => void;
   addReference: (field: ReferenceField, ref: ReferenceImage) => void;
   updateReference: (field: ReferenceField, i: number, patch: Partial<ReferenceImage>) => void;
   removeReference: (field: ReferenceField, i: number) => void;
@@ -91,16 +99,28 @@ type Store = {
   clearGallery: () => Promise<void>;
 
   // ---- generation ----
+  preferences: GenerationPreferences;
+  patchPreferences: (patch: Partial<GenerationPreferences>) => void;
+  account: AccountInfo | null;
+  accountLoading: boolean;
+  refreshAccount: () => Promise<void>;
+  isPreparing: boolean;
+  paidAcknowledged: boolean;
+  pendingPayment: { settings: GenerationSettings; cost: number; client: NaiClient } | null;
+  confirmPayment: () => Promise<void>;
+  cancelPayment: () => void;
+  runSettings: GenerationSettings | null;
+  runPreview: boolean;
   isGenerating: boolean;
   streamingBatch: StreamTile[] | null;
   /** Last failure, kept so the canvas can explain it after the toast fades. */
-  lastError: { message: string; at: number } | null;
+  lastError: { message: string; at: number; settings?: GenerationSettings } | null;
   abortRequested: boolean;
-  /** False for V3, whose final-only request cannot be interrupted through nekoai-js. */
+  /** False when the current request returns only final images. */
   canCancelGeneration: boolean;
   /** Wall-clock start of the current run, so waits can show elapsed time instead of a frozen ring. */
   runStartedAt: number | null;
-  generate: () => Promise<void>;
+  generate: (approved?: { settings: GenerationSettings; cost: number }, submitted?: GenerationSettings) => Promise<void>;
   cancelGenerate: () => void;
   clearError: () => void;
 
@@ -113,14 +133,18 @@ type Store = {
   settingsCollapsed: boolean;
   activeTab: SettingsTab;
   galleryOpen: boolean;
+  combinedPrompts: boolean;
+  negativePromptActive: boolean;
   showConnect: boolean;
   showDirector: boolean;
+  showPositions: boolean;
+  imageEditor: { mode: "draw" | "mask"; source: string | null } | null;
   focusedIndex: number | null;
   setUI: (
     patch: Partial<
       Pick<
         Store,
-        "settingsCollapsed" | "activeTab" | "galleryOpen" | "showConnect" | "showDirector" | "focusedIndex"
+        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor"
       >
     >,
   ) => void;
@@ -128,6 +152,8 @@ type Store = {
   // ---- lifecycle ----
   init: () => Promise<void>;
 };
+
+let accountRequest: { client: NaiClient; promise: Promise<void> } | null = null;
 
 export const useStore = create<Store>()((set, get) => ({
   // ---- connection ----
@@ -142,17 +168,25 @@ export const useStore = create<Store>()((set, get) => ({
       return false;
     }
     saveConnection(cfg);
-    set({ connection: cfg, client: new NaiClient(cfg), showConnect: false, connectionStatus: "ok" });
+    set({ connection: cfg, client: new NaiClient(cfg), account: null, paidAcknowledged: false, pendingPayment: null, showConnect: false, connectionStatus: "ok" });
+    void get().refreshAccount();
     return true;
   },
   disconnect: () => {
     clearConnection();
-    set({ connection: null, client: null, connectionStatus: "idle" });
+    set({ connection: null, client: null, account: null, paidAcknowledged: false, pendingPayment: null, connectionStatus: "idle" });
   },
 
   // ---- settings ----
   settings: DEFAULT_SETTINGS,
-  patchSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+  patchSettings: (patch) => set((s) => {
+    const settings = { ...s.settings, ...patch };
+    if (isV5Model(settings.model)) {
+      settings.nSamples = Math.min(settings.nSamples, maxSamples(settings.model, settings.width, settings.height));
+      if (settings.sampler === "ddim_v3") settings.sampler = DEFAULT_SETTINGS.sampler;
+    }
+    return { settings };
+  }),
   resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
   restoreSettings: (snapshot, options) => {
     // This replaces the prompt, the negative prompt, every character and every uploaded reference.
@@ -168,23 +202,23 @@ export const useStore = create<Store>()((set, get) => ({
       prev.directorReference.length > 0;
 
     set({ settings: { ...DEFAULT_SETTINGS, ...snapshot } });
-    toast.success(options?.message ?? `Restored — seed ${snapshot.seed}, ${snapshot.steps} steps`, {
+    toast.success(options?.message ?? translateUI("Restored — seed {0}, {1} steps", snapshot.seed, snapshot.steps), {
       id: options?.toastId,
       // Only offered when something was actually overwritten. On a fresh form — the common case
       // while browsing the gallery — restoring is harmless, and an Undo there is noise that
       // teaches people to ignore it.
       ...(hadWork
-        ? { duration: 6000, action: { label: "Undo", onClick: () => set({ settings: prev }) } }
+        ? { duration: 6000, action: { label: translateUI("Undo"), onClick: () => set({ settings: prev }) } }
         : {}),
     });
   },
-  addCharacter: () =>
+  addCharacter: (kind = "other") =>
     set((s) => ({
       settings: {
         ...s.settings,
         characters: [
-          ...s.settings.characters,
-          { prompt: "", uc: "", center: { x: 0.5, y: 0.5 }, enabled: true },
+          ...s.settings.characters.map(c => ({ ...c, collapsed: true })),
+          { id: crypto.randomUUID(), prompt: CHARACTER_STARTERS[kind], uc: "", center: { x: 0.5, y: 0.5 }, enabled: true, collapsed: false },
         ],
       },
     })),
@@ -199,6 +233,13 @@ export const useStore = create<Store>()((set, get) => ({
     set((s) => ({
       settings: { ...s.settings, characters: s.settings.characters.filter((_, idx) => idx !== i) },
     })),
+  moveCharacter: (from, to) => set(s => {
+    const characters = [...s.settings.characters];
+    if (from < 0 || to < 0 || from >= characters.length || to >= characters.length) return {};
+    const [character] = characters.splice(from, 1);
+    characters.splice(to, 0, character);
+    return { settings: { ...s.settings, characters } };
+  }),
   addReference: (field, ref) =>
     set((s) => ({ settings: { ...s.settings, [field]: [...s.settings[field], ref] } })),
   updateReference: (field, i, patch) =>
@@ -228,7 +269,7 @@ export const useStore = create<Store>()((set, get) => ({
     } catch (e) {
       // Swallowing this used to leave images: [], telling a returning user whose storage failed
       // that they had never generated anything.
-      console.error("Failed to load gallery", e);
+      console.error(translateUI("Failed to load gallery"), e);
       set({ galleryStatus: "error", galleryError: e instanceof Error ? e.message : String(e) });
     }
   },
@@ -239,7 +280,7 @@ export const useStore = create<Store>()((set, get) => ({
       set({ selectedBatch: batch, selectedImage: batch[0], focusedIndex: null });
       if (loadRecipe) {
         get().restoreSettings(batch[0].settings, {
-          message: `Recipe loaded from gallery — seed ${batch[0].seed}`,
+          message: translateUI("Recipe loaded from gallery — seed {0}", batch[0].seed),
           toastId: "recipe-loaded",
         });
       }
@@ -249,7 +290,7 @@ export const useStore = create<Store>()((set, get) => ({
     set({ selectedImage: img });
     if (loadRecipe) {
       get().restoreSettings(img.settings, {
-        message: `Recipe loaded from gallery — seed ${img.seed}`,
+        message: translateUI("Recipe loaded from gallery — seed {0}", img.seed),
         toastId: "recipe-loaded",
       });
     }
@@ -296,10 +337,10 @@ export const useStore = create<Store>()((set, get) => ({
     };
 
     let undone = false;
-    toast("Image deleted", {
+    toast(translateUI("Image deleted"), {
       duration: 6000,
       action: {
-        label: "Undo",
+        label: translateUI("Undo"),
         onClick: () => {
           undone = true;
           set((s) => ({
@@ -328,16 +369,54 @@ export const useStore = create<Store>()((set, get) => ({
     try {
       await clearImages();
       set({ images: [], selectedBatch: null, selectedImage: null });
-      toast.success(`Deleted ${n} image${n === 1 ? "" : "s"}`);
+      toast.success(translateUI("Deleted {0} image{1}", n, n === 1 ? "" : "s"));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error("Failed to clear gallery", e);
+      console.error(translateUI("Failed to clear gallery"), e);
       set({ galleryStatus: "error", galleryError: message });
-      toast.error(`Couldn't delete your images: ${message}`);
+      toast.error(translateUI("Couldn't delete your images: {0}", message));
     }
   },
 
   // ---- generation ----
+  preferences: DEFAULT_PREFERENCES,
+  patchPreferences: (patch) => {
+    const preferences = { ...get().preferences, ...patch };
+    set({ preferences }); saveGenerationPreferences(preferences);
+  },
+  account: null,
+  accountLoading: false,
+  refreshAccount: async () => {
+    const client = get().client;
+    if (!client) return;
+    if (accountRequest?.client === client) return accountRequest.promise;
+    set({ accountLoading: true });
+    const promise = (async () => {
+      try {
+        const account = await client.account();
+        if (get().client === client) set({ account });
+      } catch {
+        if (get().client === client) set({ account: null });
+      } finally {
+        if (get().client === client) set({ accountLoading: false });
+        if (accountRequest?.client === client) accountRequest = null;
+      }
+    })();
+    accountRequest = { client, promise };
+    return promise;
+  },
+  isPreparing: false,
+  paidAcknowledged: false,
+  pendingPayment: null,
+  cancelPayment: () => set({ pendingPayment: null }),
+  confirmPayment: async () => {
+    const pending = get().pendingPayment;
+    if (!pending || get().client !== pending.client) { set({ pendingPayment: null }); return; }
+    set({ pendingPayment: null });
+    await get().generate({ settings: pending.settings, cost: pending.cost });
+  },
+  runSettings: null,
+  runPreview: true,
   isGenerating: false,
   streamingBatch: null,
   lastError: null,
@@ -348,14 +427,17 @@ export const useStore = create<Store>()((set, get) => ({
     const { isGenerating, canCancelGeneration } = get();
     if (!isGenerating) return;
     if (!canCancelGeneration) {
-      toast.info("V3 generations return only a final image and can't be stopped once submitted.");
+      toast.info(translateUI("Final-only generations cannot be stopped after submission."));
       return;
     }
     set({ abortRequested: true });
+    get().client?.cancelGeneration();
   },
   clearError: () => set({ lastError: null }),
-  generate: async () => {
-    const { client, settings } = get();
+  generate: async (approved, submitted) => {
+    const { client } = get();
+    const settings = approved?.settings ?? submitted ?? get().settings;
+    if (get().isGenerating || get().isPreparing || get().isDirectorProcessing || get().pendingPayment) return;
     if (!client) {
       set({ showConnect: true });
       return;
@@ -364,20 +446,42 @@ export const useStore = create<Store>()((set, get) => ({
     // a V4 prompt can legitimately live entirely in the character list.
     const hasIntent =
       settings.prompt.trim().length > 0 ||
-      settings.characters.some((c) => c.enabled && c.prompt.trim().length > 0);
+      settings.characters.some((c) => c.enabled && c.prompt.trim().length > 0) || !!settings.imageSource;
     if (!hasIntent) {
-      toast.error("Describe something first — an empty prompt still costs Anlas.");
+      toast.error(translateUI("Describe something first — an empty prompt still costs Anlas."));
       set({ settingsCollapsed: false, activeTab: "basic" });
       return;
     }
+    set({ isPreparing: true });
+    try {
+      buildPayload(settings, settings.seed >= 0 ? settings.seed : 0);
+      // Refresh before a request so exhausted V5 allowance cannot silently retain a 0-point label.
+      await get().refreshAccount();
+      if (get().client !== client) return;
+      const estimate = estimateCost(settings, get().account, client.uncachedVibes(settings));
+      if (!estimate.valid) throw new Error(translateUI("This resolution and step count exceed the per-image cost limit. Reduce either setting."));
+      const cost = estimate.total;
+      if (get().preferences.confirmPaid && cost > 0 &&
+          ((!get().paidAcknowledged && approved === undefined) || (approved !== undefined && cost > approved.cost))) {
+        set({ pendingPayment: { settings: structuredClone(settings), cost, client } });
+        return;
+      }
+      set({ paidAcknowledged: cost > 0 });
+    } catch (e) {
+      toast.error(translateUI("Generation failed: {0}", e instanceof Error ? e.message : String(e)));
+      return;
+    } finally { set({ isPreparing: false }); }
+    const preview = get().preferences.streamPreview;
     const n = Math.max(1, settings.nSamples);
-    const canCancelGeneration = isV4Model(settings.model);
-    const compactLayout = typeof window !== "undefined" && window.matchMedia("(max-width: 1279px)").matches;
+    const canCancelGeneration = preview && supportsStreaming(settings.model);
+    const compactLayout = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
     // Deliberately does NOT clear selectedBatch/selectedImage: the success path below overwrites
     // them anyway, and keeping them means a failed run leaves the user's previous image intact
     // instead of dumping them on the first-run empty state.
     set({
       isGenerating: true,
+      runSettings: structuredClone(settings),
+      runPreview: preview,
       lastError: null,
       abortRequested: false,
       canCancelGeneration,
@@ -411,9 +515,9 @@ export const useStore = create<Store>()((set, get) => ({
           const img: GalleryImage = {
             dataUrl: f.dataUrl,
             timestamp: new Date().toISOString(),
-            filename: `nyanovel_${batchId}_${i + 1}.png`,
-            seed: baseSeed + f.sampleIndex,
-            settings: { ...settings, seed: baseSeed + f.sampleIndex },
+            filename: `sakura_${batchId}_${i + 1}.png`,
+            seed: (baseSeed + f.sampleIndex) >>> 0,
+            settings: { ...settings, seed: (baseSeed + f.sampleIndex) >>> 0 },
             batchId,
             batchIndex: i,
             batchSize: ordered.length,
@@ -426,20 +530,19 @@ export const useStore = create<Store>()((set, get) => ({
       set((s) => ({ images: [...saved.slice().reverse(), ...s.images] }));
       // The gallery is an overlay below 1280px. Opening it here would cover the result at the exact
       // moment it resolves; on wide layouts it remains a useful persistent confirmation/history.
-      const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 1279px)").matches;
+      const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
       set({ selectedBatch: saved, selectedImage: saved[0], galleryOpen: !compact });
       return saved;
     };
 
     try {
-      const { seed, streaming, events } = await client.generate(settings);
+      const { seed, streaming, events } = await client.generate(settings, preview);
       baseSeed = seed;
 
       for await (const ev of events) {
-        // Breaking calls the iterator's .return(), which closes the stream reader. nekoai-js's own
-        // AbortControllers are internal and timeout-only, so this is the available cancel path.
+        // Closing the iterator also releases the response reader.
         if (streaming && get().abortRequested) break;
-        if (ev.event_type === EventType.INTERMEDIATE) {
+        if (ev.event_type === EventType.INTERMEDIATE && preview) {
           set((s) => ({
             streamingBatch:
               s.streamingBatch?.map((t) =>
@@ -465,7 +568,7 @@ export const useStore = create<Store>()((set, get) => ({
           set((s) => ({
             streamingBatch:
               s.streamingBatch?.map((t) =>
-                t.sampleIndex === ev.samp_ix ? { ...t, dataUrl, progress: 1, status: "done" } : t,
+                t.sampleIndex === ev.samp_ix ? { ...t, dataUrl: preview ? dataUrl : null, progress: 1, status: "done" } : t,
               ) ?? null,
           }));
         }
@@ -474,11 +577,11 @@ export const useStore = create<Store>()((set, get) => ({
       const saved = await commit();
 
       if (get().abortRequested) {
-        toast(saved.length ? `Stopped — kept ${saved.length} finished image${saved.length > 1 ? "s" : ""}` : "Stopped");
+        toast(saved.length ? translateUI("Stopped — kept {0} finished image{1}", saved.length, saved.length > 1 ? "s" : "") : translateUI("Stopped"));
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error("Generation failed", e);
+      console.error(translateUI("Generation failed"), e);
 
       // Samples that already finished are paid for and unreproducible, so a late failure must not
       // discard them — the abort path above already keeps them, and diverging here was the bug.
@@ -487,16 +590,18 @@ export const useStore = create<Store>()((set, get) => ({
       try {
         rescued = await commit();
       } catch (saveErr) {
-        console.error("Could not persist images from the failed run", saveErr);
+        console.error(translateUI("Could not persist images from the failed run"), saveErr);
       }
 
-      if (rescued.length) {
+      if (get().abortRequested) {
+        toast(rescued.length ? translateUI("Stopped — kept {0} finished image{1}", rescued.length, rescued.length > 1 ? "s" : "") : translateUI("Stopped"));
+      } else if (rescued.length) {
         // Not an ErrorState: there are images on screen. A full-canvas error card would cover
         // the very thing that survived.
-        toast.error(`Run failed — kept ${rescued.length} finished image${rescued.length > 1 ? "s" : ""}`);
+        toast.error(translateUI("Run failed — kept {0} finished image{1}", rescued.length, rescued.length > 1 ? "s" : ""));
       } else {
-        set({ lastError: { message, at: Date.now() } });
-        toast.error(`Generation failed: ${message}`);
+        set({ lastError: { message, at: Date.now(), settings: structuredClone(settings) } });
+        toast.error(translateUI("Generation failed: {0}", message));
       }
     } finally {
       set({
@@ -505,7 +610,9 @@ export const useStore = create<Store>()((set, get) => ({
         abortRequested: false,
         canCancelGeneration: false,
         runStartedAt: null,
+        runSettings: null,
       });
+      void get().refreshAccount();
     }
   },
 
@@ -513,13 +620,15 @@ export const useStore = create<Store>()((set, get) => ({
   isDirectorProcessing: false,
   directorKind: null,
   runDirector: async (kind, opts) => {
-    const { client, selectedImage } = get();
-    if (!client) {
+    const { client } = get();
+    const selectedImage = opts?.source ?? get().selectedImage;
+    if (get().isDirectorProcessing || get().isGenerating || get().isPreparing) return;
+    if (!client && kind !== "pixelSnap") {
       set({ showConnect: true });
       return;
     }
     if (!selectedImage) {
-      toast.error("Select an image first");
+      toast.error(translateUI("Select an image first"));
       return;
     }
     set({ isDirectorProcessing: true, directorKind: kind, lastError: null });
@@ -527,14 +636,15 @@ export const useStore = create<Store>()((set, get) => ({
       const blob = await (await fetch(selectedImage.dataUrl)).blob();
       let results: Image[];
       switch (kind) {
-        case "lineArt": results = [await client.lineArt(blob)]; break;
-        case "sketch": results = [await client.sketch(blob)]; break;
-        case "backgroundRemoval": results = [await client.backgroundRemoval(blob)]; break;
-        case "declutter": results = [await client.declutter(blob)]; break;
-        case "colorize": results = [await client.colorize(blob, opts?.prompt, opts?.defry)]; break;
-        case "emotion": results = [await client.changeEmotion(blob, opts?.emotion, opts?.prompt, opts?.level)]; break;
-        case "upscale": results = [await client.upscale(blob, 4)]; break;
-        case "enhance": results = await client.enhance(blob); break;
+        case "lineArt": results = [await client!.lineArt(blob)]; break;
+        case "sketch": results = [await client!.sketch(blob)]; break;
+        case "backgroundRemoval": results = await client!.backgroundRemovalAll(blob); break;
+        case "declutter": results = [await client!.declutter(blob)]; break;
+        case "colorize": results = [await client!.colorize(blob, opts?.prompt, opts?.defry)]; break;
+        case "emotion": results = [await client!.changeEmotion(blob, opts?.emotion, opts?.prompt, opts?.level)]; break;
+        case "upscale": results = [await client!.upscale(blob)]; break;
+        case "enhance": results = await client!.enhance(blob, selectedImage.settings); break;
+        case "pixelSnap": results = [new NaiImage(base64ToBytes((await pixelSnap(selectedImage.dataUrl, opts ?? {})).split(",")[1]))]; break;
         default: results = [];
       }
       if (!results.length) return;
@@ -542,12 +652,15 @@ export const useStore = create<Store>()((set, get) => ({
       const batchId = Date.now();
       const saved: GalleryImage[] = [];
       for (let i = 0; i < results.length; i++) {
+        const dataUrl = results[i].toDataURL();
+        const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+        const dimensions = { width: bitmap.width, height: bitmap.height }; bitmap.close();
         const img: GalleryImage = {
-          dataUrl: results[i].toDataURL(),
+          dataUrl,
           timestamp: new Date().toISOString(),
-          filename: `nyanovel_${kind}_${batchId}_${i + 1}.png`,
+          filename: `sakura_${kind}_${batchId}_${i + 1}.png`,
           seed: selectedImage.seed,
-          settings: selectedImage.settings,
+          settings: { ...selectedImage.settings, ...dimensions, imageSource: null },
           batchId,
           batchIndex: i,
           batchSize: results.length,
@@ -561,13 +674,14 @@ export const useStore = create<Store>()((set, get) => ({
         images: [...saved.slice().reverse(), ...s.images],
         selectedBatch: saved,
         selectedImage: saved[0],
-        galleryOpen: !(typeof window !== "undefined" && window.matchMedia("(max-width: 1279px)").matches),
-        showDirector: false,
+        galleryOpen: !(typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches),
+        showDirector: kind !== "upscale" && kind !== "enhance",
       }));
-      toast.success("Applied director tool");
+      toast.success(translateUI("Applied director tool"));
+      if (kind !== "pixelSnap") void get().refreshAccount();
     } catch (e) {
-      console.error("Director tool failed", e);
-      toast.error(`Director tool failed: ${e instanceof Error ? e.message : String(e)}`);
+      console.error(translateUI("Director tool failed"), e);
+      toast.error(translateUI("Director tool failed: {0}", e instanceof Error ? e.message : String(e)));
     } finally {
       set({ isDirectorProcessing: false, directorKind: null });
     }
@@ -577,8 +691,12 @@ export const useStore = create<Store>()((set, get) => ({
   settingsCollapsed: false,
   activeTab: "basic",
   galleryOpen: false,
+  combinedPrompts: false,
+  negativePromptActive: false,
   showConnect: false,
   showDirector: false,
+  showPositions: false,
+  imageEditor: null,
   focusedIndex: null,
   setUI: (patch) => set(patch),
 
@@ -587,6 +705,7 @@ export const useStore = create<Store>()((set, get) => ({
     const cfg = loadConnection();
     // The recipe is the one piece of state the user actually authored, and it was the only thing
     // init() didn't restore — so ⌘R wiped it, one key away from the ⌘↵ generate gesture.
+    set({ preferences: loadGenerationPreferences() });
     const savedSettings = loadSettings();
     if (savedSettings) set({ settings: savedSettings });
     const savedUI = loadUIPrefs();
@@ -597,13 +716,14 @@ export const useStore = create<Store>()((set, get) => ({
       // the background. A revoked or expired key otherwise shows "Connected" forever and only
       // reveals itself as a failed generation.
       set({ connection: cfg, client: new NaiClient(cfg), connectionStatus: "ok" });
+      void get().refreshAccount();
       void verifyToken(cfg).then((verdict) => {
         // Only a hard rejection revokes, and never mid-run — a background probe must not yank the
         // client out from under a generation that is currently streaming.
         if (verdict === "invalid" && !get().isGenerating) {
           clearConnection();
           set({ connection: null, client: null, connectionStatus: "invalid", showConnect: true });
-          toast.error("Your saved token is no longer valid — please reconnect.");
+          toast.error(translateUI("Your saved token is no longer valid — please reconnect."));
         }
       });
     } else {
@@ -621,7 +741,7 @@ if (typeof window !== "undefined") {
   let lastUI = "";
 
   useStore.subscribe((s) => {
-    const uiKey = `${s.settingsCollapsed}|${s.activeTab}|${s.galleryOpen}`;
+    const uiKey = `${s.settingsCollapsed}|${s.activeTab}|${s.galleryOpen}|${s.combinedPrompts}`;
     if (s.settings === last && uiKey === lastUI) return;
     last = s.settings;
     lastUI = uiKey;
@@ -632,7 +752,16 @@ if (typeof window !== "undefined") {
         settingsCollapsed: s.settingsCollapsed,
         activeTab: s.activeTab,
         galleryOpen: s.galleryOpen,
+        combinedPrompts: s.combinedPrompts,
       });
     }, 400);
   });
 }
+
+// One acknowledgement per paid episode. Any return to a known 0-point setup re-arms it,
+// whether caused by a form edit, recipe restore, or refreshed account allowance.
+useStore.subscribe((s) => {
+  if (s.paidAcknowledged && estimateCost(s.settings, s.account, s.client?.uncachedVibes(s.settings) ?? s.settings.vibe.length).total === 0) {
+    useStore.setState({ paidAcknowledged: false });
+  }
+});

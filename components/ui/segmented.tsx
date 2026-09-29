@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useId } from "react";
 import { motion } from "motion/react";
 import { spring, usePrefersReducedMotion } from "@/lib/motion";
@@ -25,6 +26,7 @@ export function Segmented<T extends string>({
   asTabs = false,
   "aria-label": ariaLabel,
 }: SegmentedProps<T>) {
+  useLocale();
   const index = Math.max(0, options.findIndex((o) => o.value === value));
   const reduced = usePrefersReducedMotion();
   const baseId = useId();
@@ -91,7 +93,7 @@ export function Segmented<T extends string>({
               active ? "text-fg" : "text-fg-2 hover:text-fg",
             )}
           >
-            {opt.label}
+            {translateUI(opt.label)}
             {opt.badge ? (
               <span className="rounded-[var(--radius-pill)] bg-accent px-1.5 font-[family-name:var(--font-mono)] text-[10px] font-bold leading-[15px] text-on-accent">
                 {opt.badge}

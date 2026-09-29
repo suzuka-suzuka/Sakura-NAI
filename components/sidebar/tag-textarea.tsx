@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { TagSuggestion } from "nekoai-js";
+import { createPortal } from "react-dom";
+import type { TagSuggestion } from "@/lib/nai/protocol";
 import { useStore } from "@/lib/store";
 import { Textarea } from "@/components/ui/textarea";
+import { ClearPromptButton } from "@/components/ui/clear-prompt-button";
+import { translateUI } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** The comma/newline-delimited token immediately before the cursor. */
@@ -27,6 +30,7 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
   const client = useStore((s) => s.client);
   const listId = useId();
   const ref = useRef<HTMLTextAreaElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
   // -1 means "nothing chosen yet". This used to initialise to 0, so the top suggestion was
   // pre-selected the instant the popover opened — and Enter, the newline key in a multi-line
@@ -36,6 +40,63 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
   const [open, setOpen] = useState(false);
   const tokenStart = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestId = useRef(0);
+
+  const close = () => {
+    requestId.current++;
+    if (timer.current) clearTimeout(timer.current);
+    setOpen(false);
+  };
+
+  // A body portal escapes character cards and the scrolling sidebar. Keep it anchored to the
+  // visible part of the input, including when a modal or sidebar scrolls independently.
+  const positionList = useCallback(() => {
+    const input = ref.current, list = listRef.current;
+    if (!input || !list) return;
+    const rect = input.getBoundingClientRect();
+    let top = Math.max(8, rect.top), bottom = Math.min(window.innerHeight - 8, rect.bottom);
+    for (let parent = input.parentElement; parent; parent = parent.parentElement) {
+      if (!/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) continue;
+      const bounds = parent.getBoundingClientRect();
+      top = Math.max(top, bounds.top);
+      bottom = Math.min(bottom, bounds.bottom);
+    }
+    const below = window.innerHeight - bottom - 12, above = top - 12;
+    const upwards = below < Math.min(240, list.scrollHeight) && above > below;
+    const width = Math.min(rect.width, document.documentElement.clientWidth - 16);
+    Object.assign(list.style, {
+      visibility: bottom > top ? "visible" : "hidden",
+      left: `${Math.max(8, Math.min(rect.left, document.documentElement.clientWidth - width - 8))}px`,
+      top: `${upwards ? top - 4 : bottom + 4}px`,
+      width: `${width}px`,
+      maxHeight: `${Math.max(0, Math.min(240, upwards ? above : below))}px`,
+      transform: upwards ? "translateY(-100%)" : "none",
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) positionList();
+  }, [open, suggestions, value, positionList]);
+
+  useEffect(() => {
+    if (!open) return;
+    const observer = new ResizeObserver(positionList);
+    if (ref.current) observer.observe(ref.current);
+    const onScroll = (event: Event) => {
+      if (event.target !== listRef.current) positionList();
+    };
+    window.addEventListener("resize", positionList);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", positionList);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open, positionList]);
+
+  useEffect(() => {
+    if (open && active >= 0) listRef.current?.children[active]?.scrollIntoView({ block: "nearest" });
+  }, [open, active]);
 
   /**
    * Grow with wrapped content, then hand scrolling back to the textarea at its CSS max-height.
@@ -64,22 +125,21 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
   }, [resizeToContent]);
 
   const query = (val: string, cursor: number) => {
+    close();
     if (!client) return;
     const { token, start } = currentToken(val, cursor);
     tokenStart.current = start;
-    if (timer.current) clearTimeout(timer.current);
-    if (token.length < 2) {
-      setOpen(false);
-      return;
-    }
+    if (token.length < 2) return;
+    const id = requestId.current;
     timer.current = setTimeout(async () => {
       try {
-        const res = await client.suggestTags(token);
+        const res = await client.suggestTags(token, useStore.getState().settings.model);
+        if (id !== requestId.current || document.activeElement !== ref.current) return;
         setSuggestions(res.slice(0, 8));
         setActive(-1);
         setOpen(res.length > 0);
       } catch {
-        setOpen(false);
+        if (id === requestId.current) setOpen(false);
       }
     }, 250);
   };
@@ -101,7 +161,7 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
     const inserted = `${left}${sep}${display}, `;
     const next = inserted + right;
     onChange(next);
-    setOpen(false);
+    close();
     requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(inserted.length, inserted.length);
@@ -109,6 +169,12 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === "Escape") {
+      if (open) e.stopPropagation();
+      close();
+      return;
+    }
     if (!open) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -127,8 +193,6 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
       if (!chosen) return;
       e.preventDefault();
       accept(chosen);
-    } else if (e.key === "Escape") {
-      setOpen(false);
     }
   };
 
@@ -149,27 +213,37 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
           "max-h-[min(45dvh,28rem)] resize-none overflow-y-hidden",
           "[scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]",
           className,
+          "pr-10",
         )}
         onChange={(e) => {
           onChange(e.target.value);
           query(e.target.value, e.target.selectionStart ?? e.target.value.length);
         }}
         onKeyDown={onKeyDown}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onClick={(e) => query(e.currentTarget.value, e.currentTarget.selectionStart)}
+        onBlur={close}
       />
-      {open && (
+      <ClearPromptButton label={ariaLabel ?? translateUI("Prompt")} value={value} onClear={() => {
+        close();
+        setSuggestions([]);
+        setActive(-1);
+        onChange("");
+        ref.current?.focus();
+      }} />
+      {open && createPortal(
         // tabIndex={-1} is load-bearing: `overflow-y-auto` makes this a scrollable container, and
         // Chrome puts those in the tab order. Tab from the prompt landed here instead of the next
         // field, then the popover closed underneath it and dropped focus to <body>. Selection is
         // driven by aria-activedescendant, so the list must never be a tab stop.
-        <ul id={listId} role="listbox" tabIndex={-1} className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-[var(--radius-input)] border border-border bg-surface-3 py-1 shadow-xl">
+        <ul ref={listRef} id={listId} role="listbox" tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          className="fixed z-[80] max-h-60 overflow-y-auto overscroll-contain rounded-[var(--radius-input)] border border-border bg-surface-3 py-1 shadow-xl">
           {suggestions.map((s, i) => (
             <li
               key={s.tag}
               id={`${listId}-${i}`}
               role="option"
               aria-selected={i === active}
-              onMouseDown={(e) => e.preventDefault()}
               onClick={() => accept(s)}
               className={cn(
                 "flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-left text-[13px]",
@@ -184,7 +258,7 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
               )}
             </li>
           ))}
-        </ul>
+        </ul>, document.body,
       )}
     </div>
   );

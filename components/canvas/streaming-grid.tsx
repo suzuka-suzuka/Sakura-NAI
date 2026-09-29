@@ -1,19 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { translateUI, useLocale } from "@/lib/i18n";
+import { useEffect, useState, useRef } from "react";
 import { motion } from "motion/react";
 import { useStore, type StreamTile } from "@/lib/store";
 import { listContainer, listItem, spring } from "@/lib/motion";
 import { DEFAULT_CONNECTION } from "@/lib/nai/client";
 import { ProgressRing } from "@/components/ui/progress-ring";
-import { cn } from "@/lib/utils";
-
-function gridCols(n: number) {
-  if (n <= 1) return "grid-cols-1";
-  if (n <= 4) return "grid-cols-2";
-  if (n <= 9) return "grid-cols-3";
-  return "grid-cols-4";
-}
+import { fitPreviewGrid } from "@/lib/preview-layout";
 
 const mmss = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -33,10 +27,23 @@ function useElapsed(startedAt: number | null) {
 
 /** Live streaming previews — each sample denoises in place behind a progress ring. */
 export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdrop?: string | null }) {
-  const steps = useStore((s) => s.settings.steps);
+  useLocale();
+  const steps = useStore((s) => (s.runSettings ?? s.settings).steps);
   const startedAt = useStore((s) => s.runStartedAt);
-  const width = useStore((s) => s.settings.width);
-  const height = useStore((s) => s.settings.height);
+  const width = useStore((s) => (s.runSettings ?? s.settings).width);
+  const height = useStore((s) => (s.runSettings ?? s.settings).height);
+  const stage = useRef<HTMLDivElement>(null);
+  const [available, setAvailable] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    if (!stage.current) return;
+    const observer = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setAvailable({ width, height });
+    });
+    observer.observe(stage.current);
+    return () => observer.disconnect();
+  }, []);
+  const layout = fitPreviewGrid(width, height, tiles.length, available.width, available.height);
   const elapsed = useElapsed(startedAt);
   const livePreview = useStore((s) => s.canCancelGeneration);
   // Don't attribute a stall to NovelAI when the user pointed the client at their own proxy.
@@ -53,7 +60,7 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
   const stalled = livePreview && tiles.every((t) => t.status === "initializing") && elapsed > 15000;
 
   return (
-    <div className="relative flex h-full flex-col items-center justify-center overflow-auto p-3 sm:p-6">
+    <div className="relative flex h-full min-h-0 flex-col items-center overflow-hidden p-3 sm:p-6">
       {/* The image you were looking at when you pressed Generate, held as ambient context so the
           stage never blanks mid-commit. Same treatment as the BatchView backdrop. */}
       {backdrop && (
@@ -69,21 +76,24 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
       <div className="relative mb-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[12.5px]">
         <span className="font-semibold text-fg">
           {!livePreview
-            ? "Generating with V3 — preview arrives when complete"
+            ? translateUI("Generating with V3 — preview arrives when complete")
             : stalled
-              ? `Still waiting — ${isDirect ? "NovelAI" : "the host"} may be busy`
+              ? translateUI("Still waiting — {0} may be busy", isDirect ? "NovelAI" : translateUI("the host"))
               : done === tiles.length
-                ? "Finishing up"
-                : "Generating"}
+                ? translateUI("Finishing up")
+                : translateUI("Generating")}
         </span>
         <span className="font-[family-name:var(--font-mono)] text-[12px] tabular-nums text-muted">
-          {livePreview ? `${done}/${tiles.length} · ${Math.round(mean * 100)}% · ` : `${tiles.length} final · `}
+          {livePreview ? `${done}/${tiles.length} · ${Math.round(mean * 100)}% · ` : translateUI("{0} final · ", tiles.length)}
           {mmss(elapsed)}
         </span>
       </div>
 
+      <div ref={stage} className="relative flex min-h-0 w-full flex-1 items-center justify-center">
       <motion.div
-        className={cn("relative grid w-full max-w-4xl gap-2 sm:gap-4", gridCols(tiles.length))}
+        data-testid="streaming-grid"
+        className="relative grid gap-3"
+        style={{ width: layout.width, height: layout.height, gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`, gridAutoRows: layout.tileHeight }}
         variants={listContainer}
         initial="hidden"
         animate="show"
@@ -103,7 +113,8 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
             transition={t.status === "done" ? { duration: 0.7, ease: "easeOut" } : spring.smooth}
             // The real target aspect, not a hardcoded 3:4 — a landscape batch used to preview in
             // portrait boxes and then reflow the moment it committed.
-            style={{ aspectRatio: `${width} / ${height}` }}
+            data-testid="streaming-tile"
+            style={{ aspectRatio: `${width} / ${height}`, width: layout.tileWidth, height: layout.tileHeight }}
             className="relative flex items-center justify-center overflow-hidden rounded-[var(--radius-card)] border border-border-soft bg-surface-2"
           >
             {t.dataUrl ? (
@@ -124,7 +135,7 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
                 // blur steps instead of gliding. That is the correct degradation — the information
                 // survives, the animation doesn't — so this deliberately does not opt out via
                 // .motion-keep the way the spinner and shimmer do.
-                className="h-full w-full object-cover transition-[filter] duration-fast ease-out"
+                className="h-full w-full object-contain transition-[filter] duration-fast ease-out"
                 style={{
                   filter:
                     t.status === "done"
@@ -154,7 +165,7 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
                       style={{ animation: "spin 0.9s linear infinite" }}
                     />
                     <span className="font-[family-name:var(--font-mono)] text-[11px] text-white/80">
-                      {livePreview ? "Queued" : "Waiting for final"}
+                      {livePreview ? translateUI("Queued") : translateUI("Waiting for final")}
                     </span>
                   </>
                 ) : (
@@ -167,6 +178,7 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
           </motion.div>
         ))}
       </motion.div>
+      </div>
     </div>
   );
 }

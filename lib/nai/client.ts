@@ -1,15 +1,10 @@
-import {
-  NovelAI,
-  EventType,
-  parseImage,
-  Host,
-  type Image,
-  type ImageInput,
-  MsgpackEvent,
-  type EmotionOptions,
-} from "nekoai-js";
-import { DEFAULT_SETTINGS, type GenerationSettings, toMetadata } from "./types";
-import { isV4Model } from "./models";
+import { Host, Model, EventType, EmotionOptions, bytesToBase64, base64ToBytes, type Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
+import { parseImage, prepareDirectorReference } from "./media";
+import { NaiTransport } from "./transport";
+import { parseAccount } from "./cost";
+import { buildPayload } from "./payload";
+import { DEFAULT_SETTINGS, type GenerationSettings } from "./types";
+import { isV4Model, isV5Model, supportsStreaming, type GenerationModel } from "./models";
 
 // ---- Connection config (persisted in localStorage; the token never leaves the browser) ----
 
@@ -40,7 +35,7 @@ export function loadConnection(): ConnectionConfig | null {
   return {
     token,
     host: localStorage.getItem(KEYS.host) || DEFAULT_CONNECTION.host,
-    maxRetries: Number(localStorage.getItem(KEYS.maxRetries)) || DEFAULT_CONNECTION.maxRetries,
+    maxRetries: localStorage.getItem(KEYS.maxRetries) === null ? DEFAULT_CONNECTION.maxRetries : Number(localStorage.getItem(KEYS.maxRetries)),
     baseDelay: Number(localStorage.getItem(KEYS.baseDelay)) || DEFAULT_CONNECTION.baseDelay,
   };
 }
@@ -66,7 +61,7 @@ export function clearConnection() {
 const SETTINGS_KEY = "nya-settings";
 
 /** Reference images are dropped on save — see saveSettings. */
-type PersistedSettings = Omit<GenerationSettings, "vibe" | "directorReference">;
+type PersistedSettings = Omit<GenerationSettings, "vibe" | "directorReference" | "imageSource">;
 
 export function loadSettings(): GenerationSettings | null {
   if (typeof localStorage === "undefined") return null;
@@ -75,7 +70,9 @@ export function loadSettings(): GenerationSettings | null {
     if (!raw) return null;
     // Merged over the defaults so a field added to GenerationSettings later can never come back
     // as undefined from an older stored payload.
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<GenerationSettings>) };
+    const settings = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<GenerationSettings>) };
+    settings.characters = settings.characters.map(c => ({ ...c, id: c.id ?? crypto.randomUUID() }));
+    return settings;
   } catch {
     return null;
   }
@@ -87,7 +84,7 @@ export function saveSettings(s: GenerationSettings) {
   // handful of references blows the ~5MB quota. A QuotaExceededError here would take down
   // persistence of everything else — including the prompt — so dropping them is the correct
   // behaviour rather than a compromise.
-  const { vibe: _v, directorReference: _d, ...rest } = s;
+  const { vibe: _v, directorReference: _d, imageSource: _i, ...rest } = s;
   const persisted: PersistedSettings = rest;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(persisted));
@@ -98,13 +95,16 @@ export function saveSettings(s: GenerationSettings) {
 
 const UI_KEY = "nya-ui";
 
-export type UIPrefs = { settingsCollapsed: boolean; activeTab: "basic" | "advanced" | "characters"; galleryOpen: boolean };
+export type UIPrefs = { settingsCollapsed: boolean; activeTab: "basic" | "advanced"; galleryOpen: boolean; combinedPrompts: boolean };
 
 export function loadUIPrefs(): UIPrefs | null {
   if (typeof localStorage === "undefined") return null;
   try {
     const raw = localStorage.getItem(UI_KEY);
-    return raw ? (JSON.parse(raw) as UIPrefs) : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    // Old character-tab selections now open the combined prompt section.
+    return { settingsCollapsed: !!saved.settingsCollapsed, activeTab: saved.activeTab === "advanced" ? "advanced" : "basic", galleryOpen: !!saved.galleryOpen, combinedPrompts: saved.combinedPrompts === true };
   } catch {
     return null;
   }
@@ -141,98 +141,131 @@ export type TokenVerdict = "ok" | "invalid" | "unknown";
 export async function verifyToken(cfg: ConnectionConfig): Promise<TokenVerdict> {
   if (cfg.host !== Host.WEB) return "unknown";
   try {
-    const res = await fetch(`${Host.API}/user/subscription`, {
+    const res = await fetch(`${Host.WEB}/user/subscription`, {
       headers: { Authorization: `Bearer ${cfg.token}` },
       signal: AbortSignal.timeout(8000),
     });
     if (res.status === 401 || res.status === 403) return "invalid";
-    return "ok";
+    return res.ok ? "ok" : "unknown";
   } catch {
     return "unknown";
   }
 }
 
-// ---- Client wrapper ----
-
-const MAX_SEED = 4294967295;
-const randomSeed = () => Math.floor(Math.random() * MAX_SEED);
-
-export type GenerateHandle = {
-  /** The concrete seed used (a random one is drawn when settings.seed is -1). */
-  seed: number;
-  /** V4/V4.5 stream intermediate frames; V3 resolves once with final images. */
-  streaming: boolean;
-  events: AsyncGenerator<MsgpackEvent, void, unknown>;
-};
-
-async function* finalImageEvents(images: Image[], steps: number) {
-  for (const [sampleIndex, image] of images.entries()) {
-    yield new MsgpackEvent({
-      event_type: EventType.FINAL,
-      samp_ix: sampleIndex,
-      step_ix: steps,
-      gen_id: "non-streaming",
-      sigma: 0,
-      image,
-    });
-  }
-}
+// ---- Application-owned request layer ----
+const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+export type GenerateHandle = { seed: number; streaming: boolean; events: AsyncGenerator<MsgpackEvent> };
 
 export class NaiClient {
-  readonly raw: NovelAI;
+  private readonly transport: NaiTransport;
+  private readonly vibes = new Map<string, string>();
+  private activeController?: AbortController;
+  constructor(cfg: ConnectionConfig) { this.transport = new NaiTransport({ ...cfg }); }
+  cancelGeneration() { this.activeController?.abort(); }
 
-  constructor(cfg: ConnectionConfig) {
-    this.raw = new NovelAI({
-      token: cfg.token,
-      host: cfg.host,
-      retry: {
-        enabled: true,
-        maxRetries: cfg.maxRetries,
-        baseDelay: cfg.baseDelay,
-        maxDelay: 60000,
-        retryStatusCodes: [429, 500, 502, 503, 504],
-      },
-    });
+  async account() {
+    const response = await this.transport.request("/user/subscription", undefined, AbortSignal.timeout(8000), "application/json");
+    return parseAccount(await response.json());
   }
-
-  /** Start a streaming generation. Returns the resolved seed and the event stream. */
-  async generate(settings: GenerationSettings): Promise<GenerateHandle> {
+  uncachedVibes(s: GenerationSettings) {
+    if (s.imageSource?.mode === "infill" || isV5Model(s.model) || !isV4Model(s.model) || (s.model.includes("4-5") && s.directorReference.length)) return 0;
+    return new Set(s.vibe.map(r => JSON.stringify([s.model, r.informationExtracted, r.base64])).filter(key => !this.vibes.has(key))).size;
+  }
+  async generate(settings: GenerationSettings, preview = true): Promise<GenerateHandle> {
     const seed = settings.seed >= 0 ? settings.seed : randomSeed();
-    const meta = toMetadata(settings, seed);
-    const streaming = isV4Model(settings.model);
-    if (streaming) {
-      const events = await this.raw.generateImage(meta, true);
-      return { seed, streaming, events };
+    const payload = buildPayload(settings, seed);
+    const streaming = preview && supportsStreaming(settings.model);
+    if (!streaming) delete payload.parameters.stream;
+    const controller = new AbortController();
+    this.activeController = controller;
+    const events = this.generationEvents(settings, payload, streaming, controller);
+    return { seed, streaming, events };
+  }
+
+  private async *generationEvents(settings: GenerationSettings, payload: ReturnType<typeof buildPayload>, streaming: boolean, controller: AbortController): AsyncGenerator<MsgpackEvent> {
+    try {
+      await this.addReferences(settings, payload.parameters, controller.signal);
+      yield* this.transport.generate(payload, streaming, controller.signal);
+    } finally {
+      controller.abort();
+      if (this.activeController === controller) this.activeController = undefined;
     }
-
-    // NovelAI's V3 endpoints return a ZIP containing only final images. Adapt that array to the
-    // same event contract used by the store so persistence, batches, and per-sample seeds stay on
-    // one path without pretending that V3 supports intermediate previews.
-    const images = await this.raw.generateImage(meta, false);
-    return { seed, streaming, events: finalImageEvents(images, settings.steps) };
   }
 
-  suggestTags(prompt: string) {
-    return this.raw.suggestTags(prompt);
+  private async addReferences(s: GenerationSettings, p: Record<string, unknown>, signal?: AbortSignal) {
+    if (isV5Model(s.model) || s.imageSource?.mode === "infill") return;
+    const director = (s.model === Model.V4_5 || s.model === Model.V4_5_CUR) && s.directorReference.length > 0;
+    if (director) {
+      p.director_reference_images = await Promise.all(s.directorReference.map(r => prepareDirectorReference(r.base64)));
+      p.director_reference_descriptions = s.directorReference.map(() => ({ caption: { base_caption: "character", char_captions: [] }, legacy_uc: false }));
+      p.director_reference_strength_values = s.directorReference.map(r => r.strength);
+      p.director_reference_secondary_strength_values = s.directorReference.map(() => 1);
+      p.director_reference_information_extracted = s.directorReference.map(r => r.informationExtracted);
+    } else if (s.vibe.length) {
+      const images: string[] = [];
+      for (const ref of s.vibe) {
+        if (!isV4Model(s.model)) { images.push(ref.base64); continue; }
+        // Cache encoded vibes per connection, model, image and extraction amount.
+        const key = JSON.stringify([s.model, ref.informationExtracted, ref.base64]);
+        let encoded = this.vibes.get(key);
+        if (!encoded) {
+          const res = await this.transport.request("/ai/encode-vibe", { image: ref.base64, model: s.model, information_extracted: ref.informationExtracted }, signal, "application/octet-stream");
+          encoded = bytesToBase64(new Uint8Array(await res.arrayBuffer()));
+          if (!encoded) throw new Error("The server returned an empty encoded vibe");
+          if (this.vibes.size >= 32) this.vibes.delete(this.vibes.keys().next().value!);
+          this.vibes.set(key, encoded);
+        }
+        images.push(encoded);
+      }
+      p.reference_image_multiple = images;
+      p.reference_strength_multiple = s.vibe.map(r => r.strength);
+      p.reference_information_extracted_multiple = s.vibe.map(r => r.informationExtracted);
+    }
   }
 
-  // Director tools (operate on an existing image).
-  lineArt = (img: ImageInput) => this.raw.lineArt(img);
-  sketch = (img: ImageInput) => this.raw.sketch(img);
-  backgroundRemoval = (img: ImageInput) => this.raw.backgroundRemoval(img);
-  declutter = (img: ImageInput) => this.raw.declutter(img);
-  colorize = (img: ImageInput, prompt?: string, defry?: number) =>
-    this.raw.colorize(img, prompt, defry);
-  changeEmotion = (img: ImageInput, emotion?: EmotionOptions, prompt?: string, level?: number) =>
-    this.raw.changeEmotion(img, emotion, prompt, level);
-  upscale = (img: ImageInput, scale: 2 | 4 = 4) => this.raw.upscale(img, scale);
-  enhance = (img: ImageInput) => this.raw.enhance(img);
+  async suggestTags(prompt: string, model: GenerationModel = DEFAULT_SETTINGS.model): Promise<TagSuggestion[]> {
+    const query = new URLSearchParams({ model, prompt, lang: "en" });
+    const res = await this.transport.request(`/ai/generate-image/suggest-tags?${query}`);
+    const data = await res.json() as { tags?: TagSuggestion[] } | TagSuggestion[];
+    return Array.isArray(data) ? data : data.tags ?? [];
+  }
+  private async augment(img: ImageInput, req_type: string, extra: Record<string, unknown> = {}) {
+    const { base64: image, width, height } = await parseImage(img);
+    const images = await this.transport.images("/ai/augment-image", { image, width, height, req_type, ...extra });
+    return images[images.length - 1];
+  }
+  lineArt = (img: ImageInput) => this.augment(img, "lineart");
+  sketch = (img: ImageInput) => this.augment(img, "sketch");
+  backgroundRemoval = (img: ImageInput) => this.augment(img, "bg-removal");
+  async backgroundRemovalAll(img: ImageInput) {
+    const { base64: image, width, height } = await parseImage(img);
+    return this.transport.images("/ai/augment-image", { image, width, height, req_type: "bg-removal" });
+  }
+  declutter = (img: ImageInput) => this.augment(img, "declutter");
+  colorize = (img: ImageInput, prompt = "", defry = 0) => this.augment(img, "colorize", { prompt, defry });
+  changeEmotion = (img: ImageInput, emotion: EmotionOptions = EmotionOptions.NEUTRAL, prompt = "", level = 0) => this.augment(img, "emotion", { prompt: `${emotion};;${prompt}`, defry: level });
+  async upscale(img: ImageInput) {
+    const { base64: image, width, height } = await parseImage(img);
+    if (width * height > 3145728) throw new Error("Upscale input must not exceed 3,145,728 pixels");
+    const form = new FormData();
+    form.append("request", new Blob([JSON.stringify({ image: "image", model: "nai-diffusion-5-curated", declared_blur_sigma: 0 })], { type:"application/json" }));
+    form.append("image", new Blob([new Uint8Array(base64ToBytes(image))], { type:"image/png" }), "image.png");
+    return (await this.transport.images("/ai/upscale", form))[0];
+  }
+  async enhance(img: ImageInput, settings: GenerationSettings = DEFAULT_SETTINGS) {
+    const parsed = await parseImage(img);
+    const seed = settings.seed >= 0 ? settings.seed : randomSeed();
+    const effective = { ...DEFAULT_SETTINGS, ...settings, imageSource: null, width: parsed.width, height: parsed.height, nSamples: 1 };
+    const payload = buildPayload(effective, seed);
+    payload.action = "img2img";
+    delete payload.parameters.stream;
+    Object.assign(payload.parameters, { image: parsed.base64, strength: 0.2, noise: 0, extra_noise_seed: seed, add_original_image: false });
+    await this.addReferences(effective, payload.parameters);
+    return this.transport.images("/ai/generate-image", payload);
+  }
 }
-
 export { EventType, parseImage };
 export type { Image, MsgpackEvent };
-
-/** Parse a File/Blob into base64 + a preview data-url for the vibe/reference form. */
 export async function parseReference(file: File | Blob) {
   const parsed = await parseImage(file);
   return { base64: parsed.base64, preview: `data:image/png;base64,${parsed.base64}` };

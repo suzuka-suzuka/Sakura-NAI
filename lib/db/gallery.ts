@@ -1,8 +1,7 @@
 import type { GenerationSettings } from "@/lib/nai/types";
 
 // IndexedDB-backed local gallery. Each record keeps a full settings snapshot + the
-// resolved seed so any image can restore the whole form — and so it can later be
-// ported to latent.moe with its complete generation recipe intact.
+// resolved seed so any image can restore the whole form or be exported with its recipe.
 
 export type GalleryImage = {
   id?: number;
@@ -18,6 +17,7 @@ export type GalleryImage = {
   processedWith?: string;
 };
 
+// Keep the original database name so existing galleries survive the Sakura rebrand.
 const DB_NAME = "nyanovel-images";
 const DB_VERSION = 1;
 const STORE = "images";

@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Check, Moon, Palette, Sun } from "lucide-react";
 import { IconButton } from "./ui/icon-button";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/theme";
 
 export function ThemeControls() {
+  useLocale();
   const [mode, setMode] = useState<Mode>("dark");
   const [accent, setAccent] = useState("default");
   const [open, setOpen] = useState(false);
@@ -83,7 +85,7 @@ export function ThemeControls() {
     <div ref={rootRef} className="relative">
       <IconButton
         ref={triggerRef}
-        label="Appearance"
+        label={translateUI("Appearance")}
         aria-expanded={open}
         aria-controls="appearance-menu"
         onClick={() => setOpen((value) => !value)}
@@ -108,8 +110,8 @@ export function ThemeControls() {
         )}
       >
         <div className="mb-2.5">
-          <p className="text-[13px] font-bold text-fg">Appearance</p>
-          <p className="text-[11.5px] text-muted">Make the studio feel like yours.</p>
+          <p className="text-[13px] font-bold text-fg">{translateUI("Appearance")}</p>
+          <p className="text-[11.5px] text-muted">{translateUI("Make the studio feel like yours.")}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-1 rounded-[var(--radius-input)] bg-surface-2 p-1">
@@ -129,13 +131,13 @@ export function ThemeControls() {
                 )}
               >
                 {value === "dark" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
-                {value === "dark" ? "Dark" : "Light"}
+                {value === "dark" ? translateUI("Dark") : translateUI("Light")}
               </button>
             );
           })}
         </div>
 
-        <p className="mb-2 mt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-fg-2">Accent</p>
+        <p className="mb-2 mt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-fg-2">{translateUI("Accent")}</p>
         <div className="grid grid-cols-5 gap-2">
           {ACCENTS.map((item) => {
             const active = accent === item.key;
@@ -143,9 +145,9 @@ export function ThemeControls() {
               <button
                 key={item.key}
                 type="button"
-                aria-label={`Use ${item.label} accent`}
+                aria-label={translateUI("Use {0} accent", translateUI(item.label))}
                 aria-pressed={active}
-                title={item.label}
+                title={translateUI(item.label)}
                 onClick={() => applyAccent(item.key)}
                 className={cn(
                   "flex aspect-square items-center justify-center rounded-[9px] border transition-[transform,border-color,background-color] duration-fast hover:scale-105",
@@ -161,7 +163,7 @@ export function ThemeControls() {
             );
           })}
         </div>
-        <p className="mt-2 truncate text-[11px] text-muted">{activeAccent.label}</p>
+        <p className="mt-2 truncate text-[11px] text-muted">{translateUI(activeAccent.label)}</p>
       </div>
     </div>
   );

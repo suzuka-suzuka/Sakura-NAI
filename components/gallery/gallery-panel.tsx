@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Trash2, PanelRightClose, ImageOff, RotateCcw, AlertTriangle } from "lucide-react";
@@ -33,6 +34,7 @@ function groupByBatch(images: GalleryImage[]) {
 }
 
 export function GalleryPanel() {
+  useLocale();
   const images = useStore((s) => s.images);
   const status = useStore((s) => s.galleryStatus);
   const galleryError = useStore((s) => s.galleryError);
@@ -47,7 +49,7 @@ export function GalleryPanel() {
 
   const groups = useMemo(() => groupByBatch(images), [images]);
   const openBatch = (batchId: number) => {
-    selectBatch(batchId, true);
+    selectBatch(batchId);
     // On compact layouts the gallery is a drawer over the stage; selecting a result should reveal
     // it immediately. The persistent desktop panel stays open for rapid history browsing.
     if (window.matchMedia("(max-width: 1279px)").matches) setUI({ galleryOpen: false });
@@ -56,15 +58,15 @@ export function GalleryPanel() {
   return (
     <div className="flex h-full flex-col">
       <PanelHeader
-        title="Gallery"
+        title={translateUI("Gallery")}
         subtitle={status === "ready"
-          ? `${groups.length} batch${groups.length === 1 ? "" : "es"} · ${images.length} image${images.length === 1 ? "" : "s"}`
-          : "Local history"}
+          ? translateUI("{0} batch{1} · {2} image{3}", groups.length, groups.length === 1 ? "" : "es", images.length, images.length === 1 ? "" : "s")
+          : translateUI("Local history")}
         actions={
           <>
           {status === "ready" && images.length > 0 && (
             <IconButton
-              label="Clear all"
+              label={translateUI("Clear all")}
               size="sm"
               onClick={() => setConfirmClear(true)}
               className="hover:text-danger"
@@ -73,7 +75,7 @@ export function GalleryPanel() {
             </IconButton>
           )}
           <IconButton
-            label="Collapse gallery"
+            label={translateUI("Collapse gallery")}
             size="sm"
             title="Collapse gallery — ]"
             onClick={() => setUI({ galleryOpen: false })}
@@ -86,7 +88,7 @@ export function GalleryPanel() {
 
       {status === "loading" ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2.5">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             {Array.from({ length: 6 }, (_, i) => (
               <div
                 key={i}
@@ -104,27 +106,22 @@ export function GalleryPanel() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
           <AlertTriangle className="size-6 text-danger" />
           <div>
-            <p className="text-[13px] font-semibold text-fg">Couldn&apos;t open local gallery storage</p>
+            <p className="text-[13px] font-semibold text-fg">{translateUI("Couldn't open local gallery storage")}</p>
             <p className="mt-1 text-[12px] text-muted">{galleryError}</p>
           </div>
           <Button size="sm" variant="secondary" onClick={() => void loadGallery()}>
-            <RotateCcw className="size-4" /> Retry
-          </Button>
+            <RotateCcw className="size-4" /> {translateUI(" Retry ")}</Button>
         </div>
       ) : groups.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
           <ImageOff className="size-6 text-muted" />
-          <p className="text-[12.5px] text-muted">Your generations will appear here.</p>
+          <p className="text-[12.5px] text-muted">{translateUI("Your generations will appear here.")}</p>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
-          {/* CSS columns rather than a grid: tiles keep their true aspect ratio (see gallery-tile),
-              so a fixed-row grid would either crop every portrait or leave ragged gaps. Columns let
-              each tile take the height it wants and the wall packs itself. Reading order becomes
-              column-major, which is correct here — the list is a browsable history, not a sequence.
-              Tiles supply their own `mb-2`; `gap` does not apply to column layout. */}
+          {/* Newest batches first in one continuous column. */}
           <motion.div
-            className="columns-2 gap-2"
+            className="flex flex-col gap-2" data-testid="gallery-list"
             variants={listContainer}
             initial="hidden"
             animate="show"
@@ -147,14 +144,13 @@ export function GalleryPanel() {
       <Modal
         open={confirmClear}
         onClose={() => setConfirmClear(false)}
-        title="Delete all images?"
-        description={`This permanently removes all ${images.length} images from local storage. It can't be undone.`}
+        title={translateUI("Delete all images?")}
+        description={translateUI("This permanently removes all {0} images from local storage. It can't be undone.", images.length)}
         className="max-w-sm"
       >
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirmClear(false)}>
-            Cancel
-          </Button>
+            {translateUI(" Cancel ")}</Button>
           <Button
             variant="destructive"
             onClick={() => {
@@ -162,8 +158,7 @@ export function GalleryPanel() {
               setConfirmClear(false);
             }}
           >
-            <Trash2 className="size-4" /> Delete all
-          </Button>
+            <Trash2 className="size-4" /> {translateUI(" Delete all ")}</Button>
         </div>
       </Modal>
     </div>

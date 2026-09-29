@@ -1,6 +1,6 @@
-import { extractImageMetadata } from "nekoai-js";
-import { Model, Noise, Sampler } from "nekoai-js";
-import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS } from "./models";
+import { extractImageMetadata } from "./media";
+import { Model, Noise, Sampler } from "./protocol";
+import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, V5_FULL, V5_CURATED, type GenerationModel } from "./models";
 import { DEFAULT_SETTINGS, type CharacterSetting, type GenerationSettings } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -81,13 +81,14 @@ function pick(bag: Map<string, unknown>, ...names: string[]) {
   return undefined;
 }
 
-function readModel(value: unknown): Model | null {
+function readModel(value: unknown): GenerationModel | null {
   const raw = text(value);
   if (!raw) return null;
-  if (MODEL_VALUES.has(raw as Model)) return raw as Model;
+  if (MODEL_VALUES.has(raw as GenerationModel)) return raw as GenerationModel;
 
   const normalized = raw.toLowerCase();
   const curated = normalized.includes("curated");
+  if (/diffusion[- ]?5|\bv5\b/.test(normalized)) return curated ? V5_CURATED : V5_FULL;
   if (normalized.includes("furry") || normalized.includes("4be8c60c")) return Model.FURRY;
   if (normalized.includes("4.5") || normalized.includes("v4_5")) return curated ? Model.V4_5_CUR : Model.V4_5;
   if (normalized.includes("diffusion v4") || normalized.includes("diffusion-4") || normalized.includes(" v4")) {
@@ -145,7 +146,7 @@ function readCharacters(bag: Map<string, unknown>): CharacterSetting[] {
   });
 }
 
-/** Map extracted NovelAI entries into the subset supported by NyaNovel's generation form. */
+/** Map extracted NovelAI entries into the subset supported by Sakura NAI's generation form. */
 export function recipeFromNovelAIMetadata(
   entries: { keyword: string; text: string }[],
   image: { width: number; height: number },
@@ -228,8 +229,8 @@ export function recipeFromNovelAIMetadata(
   }
 
   const ucPreset = number(pick(bag, "ucPreset", "uc_preset"));
-  if (ucPreset !== null && ucPreset >= 0 && ucPreset <= 3) {
-    settings.ucPreset = Math.round(ucPreset) as 0 | 1 | 2 | 3;
+  if (ucPreset !== null && ucPreset >= 0 && ucPreset <= 4) {
+    settings.ucPreset = Math.round(ucPreset) as GenerationSettings["ucPreset"];
     imported.add("UC preset");
   }
 
@@ -239,6 +240,11 @@ export function recipeFromNovelAIMetadata(
     imported.add("quality tags");
   }
 
+  const qualityPreset = text(pick(bag, "qualityPreset", "quality_preset"));
+  if (qualityPreset === "standard" || qualityPreset === "light" || qualityPreset === "none") {
+    settings.qualityPreset = qualityPreset;
+    settings.qualityToggle = qualityPreset !== "none";
+  }
   const samples = number(pick(bag, "nSamples", "n_samples"));
   if (samples !== null) {
     settings.nSamples = Math.round(clamp(samples, 1, 8));
@@ -257,6 +263,13 @@ export function recipeFromNovelAIMetadata(
     imported.add("SMEA");
   }
 
+  const coords = boolean(pick(bag, "use_coords")) ?? boolean(v4Prompt?.use_coords);
+  if (coords !== null) settings.useCoords = coords;
+  const transparent = boolean(pick(bag, "tag_hint_transparent_background", "transparentBackground"));
+  if (transparent !== null) settings.transparentBackground = transparent;
+  // PNG captions already contain expanded quality/UC text. Avoid appending them again.
+  if (quality === null && qualityPreset === null && prompt) settings.qualityToggle = false;
+  if (ucPreset === null && negativePrompt) settings.ucPreset = 3;
   const characters = readCharacters(bag);
   if (characters.length) {
     settings.characters = characters;
@@ -276,8 +289,7 @@ export function recipeFromNovelAIMetadata(
 
 /** Extract a generation recipe from NovelAI PNG text chunks or stealth metadata. */
 export async function importNovelAIRecipe(file: File | Blob): Promise<ImportedRecipe> {
-  // Dragged files occasionally arrive without a MIME type. nekoai-js uses the type to decide
-  // whether to inspect PNG text chunks, so normalize it while preserving the original bytes.
+  // Preserve original PNG bytes, including metadata.
   const png = file.type === "image/png" ? file : file.slice(0, file.size, "image/png");
   const [metadata, image] = await Promise.all([extractImageMetadata(png), readPngDimensions(png)]);
   if (metadata.type !== "NOVELAI" || metadata.entries.length === 0) {

@@ -1,10 +1,11 @@
+import { translateUI } from "@/lib/i18n";
 import { toast } from "sonner";
 
 /** Trigger a browser download of a data-url image. */
 export function downloadDataUrl(dataUrl: string, filename: string) {
   const a = document.createElement("a");
   a.href = dataUrl;
-  a.download = filename || "nyanovel-image.png";
+  a.download = filename || "sakura-image.png";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -15,13 +16,13 @@ export async function copyImageToClipboard(dataUrl: string) {
   try {
     const blob = await (await fetch(dataUrl)).blob();
     await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-    toast.success("Image copied to clipboard");
+    toast.success(translateUI("Image copied to clipboard"));
   } catch {
     try {
       await navigator.clipboard.writeText(dataUrl);
-      toast.success("Image data copied");
+      toast.success(translateUI("Image data copied"));
     } catch {
-      toast.error("Couldn't copy image");
+      toast.error(translateUI("Couldn't copy image"));
     }
   }
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
+import { LanguageSwitch } from "./language-switch";
 import { useState } from "react";
 import { toast } from "sonner";
 import { KeyRound } from "lucide-react";
@@ -26,6 +28,7 @@ function hostLabel(raw: string): string {
 }
 
 export function ConnectModal() {
+  useLocale();
   const show = useStore((s) => s.showConnect);
   const connected = useStore((s) => Boolean(s.client));
   const existing = useStore((s) => s.connection);
@@ -74,7 +77,7 @@ export function ConnectModal() {
   const submit = async () => {
     if (!token.trim()) {
       setRejected(false);
-      toast.error(isDirect ? "Please enter your NovelAI API token" : "Please enter your access key");
+      toast.error(isDirect ? translateUI("Please enter your NovelAI API token") : translateUI("Please enter your access key"));
       return;
     }
     setRejected(false);
@@ -90,7 +93,7 @@ export function ConnectModal() {
       setRejected(true);
       return;
     }
-    toast.success(isDirect ? "Connected to NovelAI" : "Connected");
+    toast.success(isDirect ? translateUI("Connected to NovelAI") : translateUI("Connected"));
   };
 
   return (
@@ -98,13 +101,14 @@ export function ConnectModal() {
       open={show}
       dismissible={connected}
       onClose={() => setUI({ showConnect: false })}
-      ariaLabel="Welcome to NyaNovel — connect to start generating"
+      ariaLabel={translateUI("Welcome to Sakura NAI — connect to start generating")}
       className="max-w-md"
     >
+      <div className="mb-3 flex justify-end"><LanguageSwitch /></div>
       <div className="mb-5 flex flex-col items-center text-center">
         <BrandLogo variant="mark" className="mb-3 size-14" />
         <h2 className="font-[family-name:var(--font-display)] text-[21px] font-bold tracking-[-0.02em] text-fg">
-          {connected ? "Connection settings" : "Welcome to NyaNovel"}
+          {connected ? translateUI("Connection settings") : translateUI("Welcome to Sakura NAI")}
         </h2>
         {/* The destination is user-configurable, so the privacy claim has to follow it. Saying
             "straight to NovelAI" while Host URL points at a proxy would be a false statement about
@@ -116,19 +120,13 @@ export function ConnectModal() {
         <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted">
           {connected ? (
             <>
-              Your {isDirect ? "token" : "access key"} is saved in this browser and already in use.
-              Edit it below only if you want to change it.
-            </>
+              {translateUI(" Your ")}{isDirect ? translateUI("token") : translateUI("access key")} {translateUI(" is saved in this browser and already in use. Edit it below only if you want to change it. ")}</>
           ) : isDirect ? (
             <>
-              Paste your NovelAI token to start. It&apos;s stored only in this browser and sent straight
-              to NovelAI — never to us.
-            </>
+              {translateUI(" Paste your NovelAI token to start. It's stored only in this browser and sent straight to NovelAI — never to us. ")}</>
           ) : (
             <>
-              Paste your access key to start. It&apos;s stored only in this browser and sent, along with
-              your prompts, to the host you&apos;ve configured below.
-            </>
+              {translateUI(" Paste your access key to start. It's stored only in this browser and sent, along with your prompts, to the host you've configured below. ")}</>
           )}
         </p>
 
@@ -143,14 +141,14 @@ export function ConnectModal() {
       </div>
       <div className="flex flex-col gap-4">
         <div>
-          <Label htmlFor="nai-token">{isDirect ? "NovelAI API token" : "Access key"}</Label>
+          <Label htmlFor="nai-token">{isDirect ? translateUI("NovelAI API token") : translateUI("Access key")}</Label>
           <div className="relative">
             <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
             <Input
               id="nai-token"
               type="password"
               autoComplete="off"
-              placeholder={isDirect ? "pst-..." : "your access key"}
+              placeholder={isDirect ? "pst-..." : translateUI("your access key")}
               className="pl-9 font-[family-name:var(--font-mono)] text-[13px]"
               value={token}
               aria-invalid={rejected || undefined}
@@ -165,8 +163,8 @@ export function ConnectModal() {
           {rejected && (
             <p id="nai-token-error" role="alert" className="mt-1.5 text-[12.5px] text-danger">
               {isDirect
-                ? "NovelAI rejected that token. Copy it again from your account settings — it starts with pst-."
-                : "The host rejected that access key. Check the key and the host URL below."}
+                ? translateUI("NovelAI rejected that token. Copy it again from your account settings — it starts with pst-.")
+                : translateUI("The host rejected that access key. Check the key and the host URL below.")}
             </p>
           )}
         </div>
@@ -175,8 +173,8 @@ export function ConnectModal() {
             for anyone who hadn't already found it. */}
         {isDirect && !rejected && (
           <p className="-mt-1 text-[12px] leading-relaxed text-muted">
-            Find yours in NovelAI under{" "}
-            <span className="text-fg-2">Account → Get Persistent API Token</span>.
+            {translateUI(" Find yours in NovelAI under")}{" "}
+            <span className="text-fg-2">{translateUI("Account → Get Persistent API Token")}</span>.
           </p>
         )}
 
@@ -185,18 +183,17 @@ export function ConnectModal() {
           onClick={() => setAdvanced((v) => !v)}
           className="self-start text-[12.5px] font-semibold text-muted transition-colors hover:text-fg-2"
         >
-          {advanced ? "− Hide" : "+ Advanced"} connection settings
-        </button>
+          {advanced ? translateUI("− Hide") : translateUI("+ Advanced")} {translateUI(" connection settings ")}</button>
 
         {advanced && (
           <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border-soft bg-surface-2 p-4">
             <div>
-              <Label htmlFor="nai-host">Host URL</Label>
+              <Label htmlFor="nai-host">{translateUI("Host URL")}</Label>
               <Input id="nai-host" value={host} onChange={(e) => setHost(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="nai-retries">Max retries</Label>
+                <Label htmlFor="nai-retries">{translateUI("Max retries")}</Label>
                 <NumberInput
                   id="nai-retries"
                   min={0}
@@ -206,7 +203,7 @@ export function ConnectModal() {
                 />
               </div>
               <div>
-                <Label htmlFor="nai-delay">Base delay (ms)</Label>
+                <Label htmlFor="nai-delay">{translateUI("Base delay (ms)")}</Label>
                 <NumberInput
                   id="nai-delay"
                   min={500}
@@ -227,12 +224,11 @@ export function ConnectModal() {
                 style={{ animation: "spin 0.7s linear infinite" }}
                 aria-hidden
               />
-              Checking key…
-            </>
+              {translateUI(" Checking key… ")}</>
           ) : connected ? (
-            "Update connection"
+            translateUI("Update connection")
           ) : (
-            "Connect"
+            translateUI("Connect")
           )}
         </Button>
       </div>

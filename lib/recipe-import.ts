@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI } from "@/lib/i18n";
 import { toast } from "sonner";
 import { useStore } from "./store";
 
@@ -17,7 +18,7 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
 
   const isPng = file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
   if (!isPng) {
-    toast.error("Choose a NovelAI PNG — generation metadata is not reliably preserved in other formats.");
+    toast.error(translateUI("Choose a NovelAI PNG — generation metadata is not reliably preserved in other formats."));
     return false;
   }
 
@@ -26,7 +27,7 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
   // replaces this spinner in place rather than stacking a second card next to it. Nothing dismisses
   // it explicitly — a dismiss here would race the replacement and blank the result.
   const TOAST_ID = "recipe-import";
-  toast.loading("Reading generation metadata…", { id: TOAST_ID });
+  toast.loading(translateUI("Reading generation metadata…"), { id: TOAST_ID });
 
   try {
     // PNG/EXIF/stealth decoders are substantial and only needed after this deliberate gesture.
@@ -35,7 +36,7 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
     const recipe = await importNovelAIRecipe(file);
 
     restoreSettings(recipe.settings, {
-      message: `Imported ${recipe.importedFields.length} recipe fields from ${file.name}`,
+      message: translateUI("Imported {0} recipe fields from {1}", recipe.importedFields.length, file.name),
       toastId: TOAST_ID,
     });
     // Reveal the composer — the recipe just rewrote it, and on compact layouts (or with the rail
@@ -44,12 +45,12 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
 
     if (recipe.omittedReferences) {
       toast.warning(
-        "Reference strengths were found, but source reference images are not embedded in NovelAI PNGs.",
+        translateUI("Reference strengths were found, but source reference images are not embedded in NovelAI PNGs."),
       );
     }
     return true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The image could not be read.";
+    const message = error instanceof Error ? error.message : translateUI("The image could not be read.");
     toast.error(message, { id: TOAST_ID });
     return false;
   }

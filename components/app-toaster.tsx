@@ -16,5 +16,8 @@ export function AppToaster() {
     return () => window.removeEventListener("nya-theme-change", sync);
   }, []);
 
-  return <Toaster position="bottom-right" theme={theme} richColors />;
+  // The history footer reports its height so notifications sit just above its divider.
+  return <Toaster className="nai-toaster" position="bottom-right" theme={theme} richColors
+    offset={{ bottom: "calc(var(--nai-toast-bottom, 56px) + env(safe-area-inset-bottom, 0px))" }}
+    mobileOffset={{ bottom: "calc(var(--nai-toast-bottom, 56px) + env(safe-area-inset-bottom, 0px))" }} />;
 }

@@ -17,7 +17,7 @@ coverage
 # Documentation and deployment files are not inputs to `next build`.
 docs
 **/*.md
-LICENSE
+!THIRD_PARTY_NOTICES.md
 Dockerfile*
 docker-compose*.yml
 
@@ -42,3 +42,4 @@ report.*.json
 examples/input
 examples/output
 html
+logs

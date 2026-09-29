@@ -1,13 +1,28 @@
-import { Model, Sampler, Noise } from "nekoai-js";
-import type { Metadata, CharacterPrompt } from "nekoai-js";
+import { Sampler, Noise } from "./protocol";
+import type { QualityPreset, NegativePreset } from "./presets";
+import { type GenerationModel } from "./models";
 
 // ---- App-facing generation settings (mirrors the form; serializable for the gallery) ----
 
 export type CharacterSetting = {
+  id?: string;
+  name?: string;
+  collapsed?: boolean;
   prompt: string;
   uc: string;
   center: { x: number; y: number };
   enabled: boolean;
+};
+
+export type ImageSource = {
+  dataUrl: string;
+  width: number;
+  height: number;
+  mode: "img2img" | "infill";
+  mask?: string;
+  strength: number;
+  noise: number;
+  inpaintStrength: number;
 };
 
 export type ReferenceImage = {
@@ -22,7 +37,8 @@ export type ReferenceImage = {
 export type GenerationSettings = {
   prompt: string;
   negativePrompt: string;
-  model: Model;
+  model: GenerationModel;
+  promptMode?: "anime" | "furry";
   width: number;
   height: number;
   steps: number;
@@ -32,85 +48,45 @@ export type GenerationSettings = {
   scale: number;
   cfgRescale: number;
   noiseSchedule: Noise;
-  ucPreset: 0 | 1 | 2 | 3;
+  ucPreset: NegativePreset;
   qualityToggle: boolean;
+  qualityPreset?: QualityPreset;
   nSamples: number;
   dynamicThresholding: boolean;
   autoSmea: boolean;
+  transparentBackground: boolean;
+  autoText: boolean;
+  useCoords: boolean;
   characters: CharacterSetting[];
   vibe: ReferenceImage[];
   directorReference: ReferenceImage[];
+  imageSource?: ImageSource | null;
 };
 
 export const DEFAULT_SETTINGS: GenerationSettings = {
   prompt: "",
   negativePrompt: "",
-  model: Model.V4_5,
+  model: "nai-diffusion-5-full",
+  promptMode: "anime",
   width: 832,
   height: 1216,
   steps: 28,
   seed: -1,
   sampler: Sampler.EULER_ANC,
-  scale: 5.5,
+  scale: 5,
   cfgRescale: 0,
   noiseSchedule: Noise.KARRAS,
   ucPreset: 0,
   qualityToggle: true,
+  qualityPreset: "light",
   nSamples: 1,
   dynamicThresholding: false,
   autoSmea: false,
+  transparentBackground: false,
+  autoText: true,
+  useCoords: false,
   characters: [],
   vibe: [],
   directorReference: [],
+  imageSource: null,
 };
-
-/**
- * Map app settings + a resolved seed into a nekoai-js Metadata payload.
- * The seed is resolved by the caller (client.generate) so the concrete value can
- * be persisted alongside the resulting image.
- */
-export function toMetadata(s: GenerationSettings, resolvedSeed: number): Metadata {
-  const meta: Metadata = {
-    prompt: s.prompt,
-    negative_prompt: s.negativePrompt,
-    model: s.model,
-    width: s.width,
-    height: s.height,
-    steps: s.steps,
-    seed: resolvedSeed,
-    sampler: s.sampler,
-    scale: s.scale,
-    cfg_rescale: s.cfgRescale,
-    noise_schedule: s.noiseSchedule,
-    ucPreset: s.ucPreset,
-    qualityToggle: s.qualityToggle,
-    n_samples: s.nSamples,
-    dynamic_thresholding: s.dynamicThresholding,
-    autoSmea: s.autoSmea,
-  };
-
-  const enabledChars = s.characters.filter((c) => c.enabled && c.prompt.trim());
-  if (enabledChars.length > 0) {
-    meta.characterPrompts = enabledChars.map<CharacterPrompt>((c) => ({
-      prompt: c.prompt.trim(),
-      uc: c.uc.trim(),
-      center: c.center,
-    }));
-  }
-
-  if (s.vibe.length > 0) {
-    meta.reference_image_multiple = s.vibe.map((v) => v.base64);
-    meta.reference_strength_multiple = s.vibe.map((v) => v.strength);
-    meta.reference_information_extracted_multiple = s.vibe.map((v) => v.informationExtracted);
-  }
-
-  if (s.directorReference.length > 0) {
-    meta.director_reference_images = s.directorReference.map((v) => v.base64);
-    meta.director_reference_strength_values = s.directorReference.map((v) => v.strength);
-    meta.director_reference_information_extracted = s.directorReference.map(
-      (v) => v.informationExtracted,
-    );
-  }
-
-  return meta;
-}

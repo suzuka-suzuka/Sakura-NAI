@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -30,6 +31,7 @@ export function Modal({
   className,
   children,
 }: ModalProps) {
+  useLocale();
   const mounted = useDelayedUnmount(open, 160);
   const panelRef = useFocusTrap<HTMLDivElement>(open);
   const titleId = useId();
@@ -70,9 +72,10 @@ export function Modal({
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
         className={cn(
-          "relative z-10 w-full max-w-lg rounded-[var(--radius-card-lg)] border border-border bg-surface p-6 shadow-2xl outline-none",
+          "relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[var(--radius-card-lg)] border border-border bg-surface p-6 shadow-2xl outline-none",
           "transition-[opacity,transform]",
           open ? "opacity-100 translate-y-0 duration-base ease-out" : "opacity-0 translate-y-1.5 duration-fast ease-in",
+          className,
         )}
         style={open ? { animation: "fadeUp var(--duration-base) var(--ease-out)" } : undefined}
       >
@@ -88,7 +91,7 @@ export function Modal({
             </div>
             {dismissible && onClose && (
               <IconButton
-                label="Close"
+                label={translateUI("Close")}
                 size="sm"
                 onClick={onClose}
                 className="-mr-1 -mt-1"

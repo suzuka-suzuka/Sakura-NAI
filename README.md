@@ -1,317 +1,147 @@
-<p align="center">
-  <img src="assets/brand/github-social-banner.png" alt="NyaNovel — AI image generation, refined" width="100%" />
-</p>
+# Sakura NAI
 
 <p align="center">
-  A fast, local-first studio for NovelAI image generation.<br />
-  More control, clearer feedback, and less friction between an idea and its next iteration.
+  <img src="assets/brand/sakura-banner.png" alt="Sakura NAI — 让灵感如樱花绽放" width="100%" />
 </p>
 
-<p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#docker">Docker</a> ·
-  <a href="#privacy-and-data">Privacy</a> ·
-  <a href="#development">Development</a>
-</p>
+**简体中文** · [English](README.en.md)
 
-## About NyaNovel
+一个以樱花为主题的 NovelAI 绘图工作台。把提示词、角色、生成参数和本地图库放在同一页，让灵感从一句描述开始。
 
-NyaNovel is an unofficial browser client for NovelAI image generation. It keeps the depth of
-NovelAI's generation controls while presenting them as a focused, responsive creative workspace:
-compose on the left, review in the center, and move through local history on the right.
+Sakura NAI 可在 Windows 本地运行，也可部署到 Linux 服务器。浏览器直接调用 NovelAI 官方 API，项目自行构造请求、解析图片与流式响应，不依赖 NovelAI SDK。它是独立的非官方客户端，需要你自己的 NovelAI API Token 和相应的账户权限。
 
-Generation requests are made from the browser through
-[`nekoai-js`](https://github.com/Nya-Foundation/NekoAI-JS). NyaNovel does not require its own account
-server or image database. Your connection settings stay in browser storage, and generated images are
-kept locally in IndexedDB.
+## 能做什么
 
-NyaNovel is part of the **latent.moe** family and is maintained by the
-[Nya Foundation](https://github.com/Nya-Foundation).
+- **以 V5 为主的绘图流程**：支持 NAI Diffusion V5 Full / Curated，并保留 V4.5、V4、Anime V3 和 Furry V3。默认使用 V5 Full。
+- **提示词与角色**：正负提示词可分开显示或合并切换；主提示词和角色提示词支持标签建议、一键清空。角色可选 female、male、other，支持自动位置和自定义位置。V5 最多 22 个角色，V4 系列最多 6 个。
+- **质量词与负面预设**：选择标准、轻量或关闭质量词，搭配模型对应的负面预设；悬浮可查看完整内容。V5 支持透明背景选项。
+- **随手调整参数**：直接编辑步数、Guidance、种子和采样器，一键切换随机种子；支持尺寸、批量生成及参数重置。
+- **可选流式预览**：预览随图片比例适配。关闭后保留上一张图片，首张生成时保持空白画布，完成后再展示结果。
+- **点数显示**：生成按钮及相应图像工具显示 Anlas 点数；从免费生成切换到付费生成时可弹出一次提醒，设置中可关闭。计算会结合账户状态，最终扣费由 API 服务端决定。
+- **图像工作流**：图生图、局部重绘、增强、变体、2 倍放大及图像工具；参考图、Vibe Transfer 的可用性随模型变化，当前 V5 不支持 Vibe / 精确参考图。
+- **本地图库**：单列浏览、全屏预览、下载 PNG、打包下载、删除撤销。点击历史图片只预览，复用参数需要单独操作；支持从 NovelAI PNG 导入参数。
+- **樱花主题**：五瓣樱花标志、樱粉浅色与暖紫深色界面，支持中英文和主题色切换。桌面保留设置区，手机使用抽屉布局。
 
-## Features
+空白画布提供「樱花中的女孩」「樱巫女（Sakura Miko）」「月下夜樱」三个示例。樱巫女示例使用 `sakura miko, hololive` 角色标签。**点击示例会替换整段正向提示词**，不会自动生成，也不会改动负面提示词和角色设置。
 
-### Generation studio
+## 本地运行
 
-- NovelAI Diffusion V4.5 Full and Curated, V4 Full and Curated, Anime V3, and Furry V3.
-- Portrait, landscape, square, and wallpaper presets with custom width and height controls.
-- Steps, sampler, prompt guidance, CFG rescale, noise schedule, batch size, and seed controls.
-- Quality tags, undesired-content presets, dynamic thresholding, and automatic SMEA.
-- Random or pinned seeds with per-result seed restoration.
-- Complete generation settings saved with every image.
-
-### Live generation feedback
-
-- Streamed intermediate frames that resolve in place while NovelAI generates.
-- Per-sample step progress, aggregate batch progress, and elapsed time.
-- Multi-image streaming grids that preserve the requested aspect ratio.
-- Stop control for in-flight batches; completed samples are preserved when possible.
-- Actionable connection, quota, network, and generation error states.
-
-### Characters and references
-
-- V4 and V4.5 multi-character prompts.
-- Per-character prompt, undesired content, enabled state, and visual position control.
-- Multiple vibe-transfer references with individual strength and information-extracted values.
-- Multiple Director references with independent controls.
-- Image previews and removable reference cards directly inside the composer.
-
-### Director tools
-
-Apply NovelAI Director operations to any selected result:
-
-- Line art
-- Sketch
-- Background removal
-- Declutter
-- Colorize
-- Change emotion
-- 4× upscale
-- Enhance
-
-Director outputs return to the same local gallery and retain the source image's generation metadata.
-
-### Prompting and iteration
-
-- Inline NovelAI tag suggestions with category styling and post counts.
-- Suggestions inside main, undesired-content, and character prompt fields.
-- One-click seed reuse or complete settings restoration from any result.
-- Drag-and-drop NovelAI PNG recipe import, including V4 character prompts and positions.
-- Undo support when settings are replaced or an image is deleted.
-- Example prompts that append safely to work already in progress.
-
-### Local gallery and review
-
-- IndexedDB-backed image history grouped by generation batch.
-- Selecting a gallery result automatically loads its saved generation recipe into the composer.
-- Batch filmstrip with mouse and keyboard navigation.
-- Focused lightbox with zoom and previous/next navigation.
-- Download, clipboard copy, copy seed, reuse settings, and delete actions.
-- Local-storage error recovery and explicit clear-all confirmation.
-
-### Interface
-
-- Persistent three-panel workstation on wide displays.
-- Animated composer and gallery drawers on compact displays.
-- Dark and light themes with Signal Coral branding and optional accent palettes.
-- Reduced-motion support, visible focus states, focus-trapped dialogs, and accessible status updates.
-- Responsive result metadata and controls designed for both pointer and touch input.
-
-## Quick start
-
-### Requirements
-
-- A recent [Bun](https://bun.sh/) release.
-- A modern browser with IndexedDB support.
-- A NovelAI account with image-generation access and a persistent API token.
-
-### Install and run
+准备 Bun、Node.js 22 或更高版本，以及支持 IndexedDB 的现代浏览器。下载或克隆本仓库后，在项目根目录执行：
 
 ```bash
-git clone https://github.com/Nya-Foundation/NyaNovel.git
-cd NyaNovel
+git clone https://github.com/suzuka-suzuka/Sakura-NAI.git
+cd Sakura-NAI
 bun install --frozen-lockfile
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+打开 [http://localhost:3000](http://localhost:3000)。首次连接时输入你的 NovelAI API Token。需要自定义接口地址时，在连接窗口展开「高级连接设置」；自定义接口应支持本项目调用的 NovelAI API 及浏览器跨域请求。
 
-On first launch, enter your NovelAI persistent API token. You can create one under NovelAI's
-**Account → Get Persistent API Token** settings. The default API host is
-`https://image.novelai.net`.
-
-> Image generation consumes your NovelAI account's available Anlas according to NovelAI's current
-> pricing and account rules.
-
-## Keyboard shortcuts
-
-| Shortcut | Action |
-| --- | --- |
-| <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> | Generate from anywhere in the studio |
-| <kbd>[</kbd> | Toggle the composer |
-| <kbd>]</kbd> | Toggle the gallery |
-| <kbd>Esc</kbd> | Close the active dialog, lightbox, or compact drawer |
-| <kbd>←</kbd> / <kbd>→</kbd> | Move through batch results or lightbox images |
-| <kbd>+</kbd> / <kbd>−</kbd> | Zoom in or out in the lightbox |
-| <kbd>0</kbd> | Reset lightbox zoom |
-
-Tag suggestions support arrow-key navigation and can be accepted with <kbd>Enter</kbd> or
-<kbd>Tab</kbd>.
-
-## Production build
-
-Create and run the Next.js production build:
+如果电脑只有 Node.js，也可以临时通过 npm 调用 Bun 安装依赖：
 
 ```bash
+npm exec --yes --package=bun -- bun install --frozen-lockfile
+npm run dev
+```
+
+界面语言会读取浏览器偏好并保存你的选择，可在菜单或连接窗口切换。本文为默认中文说明，英文文档见 [README.en.md](README.en.md)。
+
+### Windows 本地生产版
+
+```powershell
+npm run build
+.\start-local.cmd
+```
+
+启动脚本会准备 standalone 静态资源并监听 **127.0.0.1:3000**。打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)，在终端按 Ctrl + C 停止。修改代码后需要重新构建并重启；开发时使用 `npm run dev` 即可。
+
+更多本机启动说明见 [LOCAL-DEPLOY.md](LOCAL-DEPLOY.md)。
+
+## Linux 服务器部署
+
+仓库提供多阶段 Dockerfile 和 Docker Compose 配置。安装 Docker Engine 与 Compose 插件后，在项目目录运行：
+
+```bash
+docker compose up -d --build
+docker compose logs -f web
+```
+
+默认通过服务器的 **8080** 端口访问，容器内部监听 3000。镜像运行 Next.js standalone 服务，使用非 root 用户并配置健康检查。更新代码后再次执行第一条命令即可重新构建。
+
+绑定自己的域名时，将反向代理指向该端口并启用 HTTPS。可通过 `SITE_URL` 设置页面分享元数据的公开地址：
+
+```bash
+SITE_URL=https://sakura.example.com docker compose up -d --build
+```
+
+不使用 Docker 时：
+
+```bash
+bun install --frozen-lockfile
 bun run build
-bun run start
+npm run start -- --hostname 127.0.0.1 --port 3000
 ```
 
-The server listens on port `3000` by default.
+用 systemd 等进程管理工具保持服务运行，再由反向代理接入。此方式仅监听服务器回环地址；Docker Compose 默认映射服务器的 8080 端口。
 
-Social metadata is origin-aware at runtime. NyaNovel uses `Host`, `X-Forwarded-Host`, and
-`X-Forwarded-Proto` to produce absolute Open Graph and Twitter image URLs, so the same build can run
-on different domains without modification.
+服务器负责提供网页。**绘图请求仍由用户浏览器发出**，不会自动借用服务器网络代理 NovelAI。部署不需要在服务器环境变量中填写用户 Token。
 
-If you want to force a canonical public origin, set the optional server-side `SITE_URL` variable
-when starting the application—no rebuild is required:
+构建阶段会通过 `next/font` 下载 Google Fonts，因此构建机器需要能访问字体服务；运行时字体随应用一起提供。
 
-```bash
-SITE_URL=https://nyanovel.example.com bun run start
-```
+## 常用快捷键
 
-## Docker
-
-The included multi-stage image uses Bun only during installation and compilation. The runtime image
-contains a minimal Alpine base, the official Node 22 binary, and Next.js standalone output. It runs
-as an unprivileged user and includes a dependency-free health check.
-
-### Docker Compose
-
-```bash
-docker compose up --build
-```
-
-Open [http://localhost:8080](http://localhost:8080).
-
-Behind a correctly configured reverse proxy, no origin configuration is required. You can optionally
-force a canonical origin at runtime:
-
-```bash
-SITE_URL=https://nyanovel.example.com docker compose up -d --build
-```
-
-### Docker CLI
-
-```bash
-docker build -t nyanovel .
-
-docker run --rm -p 8080:3000 nyanovel
-```
-
-Optional canonical-origin override:
-
-```bash
-docker run --rm -p 8080:3000 \
-  -e SITE_URL=https://nyanovel.example.com \
-  nyanovel
-```
-
-## Privacy and data
-
-NyaNovel is local-first, but it is important to understand where each kind of data goes.
-
-| Data | Storage or destination |
+| 快捷键 | 操作 |
 | --- | --- |
-| API token and connection preferences | Browser local storage for the current origin |
-| Prompts, settings, and reference images used for generation | Sent to the configured image API host |
-| Generated images and per-image settings | Browser IndexedDB for the current origin |
-| Theme and panel preferences | Browser local storage |
+| **Ctrl + K** | 打开命令面板，搜索命令、模型和图库 |
+| **Ctrl + Enter** | 使用当前参数开始生成 |
+| **Esc** | 关闭当前弹窗、全屏预览或手机抽屉 |
+| **[** | 展开／收起手机设置区 |
+| **]** | 展开／收起图库 |
+| **← / →** | 在全屏预览中切换图片 |
+| **+ / − / 0** | 全屏预览中放大／缩小／适应窗口 |
 
-With the default configuration, generation traffic goes directly from your browser to NovelAI. If
-you configure a different Host URL, your token or access key, prompts, references, and generation
-requests are sent to that host instead.
+macOS 也支持用 Command 代替 Ctrl。输入提示词时，方括号不会触发面板切换。全屏预览可点击图片外的空白区域退出。
 
-NyaNovel does not upload your local gallery to an application server. Clearing site data, using a
-different browser profile, or changing the deployment origin can make locally stored settings and
-images unavailable. Download important results you want to retain independently.
+## 数据保存在哪里
 
-Treat any deployed NyaNovel origin as trusted: browser local storage is accessible to JavaScript
-served by that same origin.
-
-## Architecture
-
-NyaNovel is a Next.js App Router application. The server delivers the application shell; sensitive
-generation and storage operations happen in the browser.
-
-| Path | Responsibility |
+| 数据 | 保存或发送位置 |
 | --- | --- |
-| `app/` | Application entry point, metadata, fonts, and global design tokens |
-| `components/sidebar/` | Generation settings, prompting, characters, and reference controls |
-| `components/canvas/` | Streaming previews, result stage, lightbox, and Director tools |
-| `components/gallery/` | Local batch history and gallery actions |
-| `components/ui/` | Shared accessible interface primitives |
-| `lib/nai/` | Connection persistence, SDK adapter, settings mapping, and model options |
-| `lib/db/` | IndexedDB gallery persistence |
-| `lib/store.ts` | Zustand application state and generation lifecycle |
-| `assets/brand/` | Latent Frame logos, mark, app icon, and social artwork |
+| API Token、连接地址、参数及偏好 | 当前浏览器的 localStorage |
+| 已生成图片与生成参数 | 当前浏览器的 IndexedDB |
+| 提示词、参考图和绘图请求 | 直接发送至 NovelAI 或你配置的接口地址 |
+| 网页与静态资源 | 本地服务或你部署的服务器 |
 
-### Technology
+图库不会自动同步到其他浏览器或设备。更换域名、端口、浏览器会进入不同的存储空间；清理站点数据也会删除本地图库，重要图片请先下载。
 
-- [Next.js](https://nextjs.org/) 16 and React 19
-- [Tailwind CSS](https://tailwindcss.com/) v4
-- [Zustand](https://zustand.docs.pmnd.rs/) for client state
-- [`nekoai-js`](https://github.com/Nya-Foundation/NekoAI-JS) for NovelAI operations
-- IndexedDB for local image persistence
-- Bun for dependency management and builds
-- TypeScript throughout
+升级时沿用历史版本的内部存储键和图库数据库名，以保留已有数据。产品名称与下载文件名已使用 Sakura；内部兼容名称不影响界面品牌。自定义接口会接收你的 Token 和请求内容，请使用你信任的服务。
 
-## Development
+## 二次开发
 
-### Commands
+技术栈：**Next.js 16、React 19、TypeScript、Tailwind CSS 4、Zustand、IndexedDB**。
 
-| Command | Description |
+| 目录 | 内容 |
 | --- | --- |
-| `bun run dev` | Start the development server |
-| `bun run build` | Create the optimized standalone production build |
-| `bun run start` | Run the production Next.js server |
-| `bun run lint` | Run ESLint |
-| `bun run typecheck` | Run TypeScript without emitting files |
-
-Before opening a pull request, run:
+| `app/` | 页面入口、主题变量、图标与分享元数据 |
+| `components/sidebar/` | 提示词、角色、参数和设置菜单 |
+| `components/canvas/` | 欢迎页、预览、图像编辑与图像工具 |
+| `components/gallery/` | 本地图库及图片操作 |
+| `lib/nai/` | 模型参数、请求构造、传输、图片解析和点数计算 |
+| `lib/db/` | IndexedDB 图库 |
+| `lib/i18n/` | 中英文界面文案 |
+| `assets/brand/` | Sakura 樱花 SVG 源文件、图标与 README 横幅 |
+| `tests/` | 请求、费用、图片与存储相关测试 |
 
 ```bash
-bun run typecheck
-bun run lint
-bun run build
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-### Contributing
+模型适配细节见 [NAI V5 说明](docs/NAI-V5.md)，界面对照与验证记录见 [界面记录](docs/OFFICIAL-UI-AUDIT.md)。各模型的参数、图像工具及流式能力并不完全相同，请以界面支持的选项为准。
 
-Issues and focused pull requests are welcome. Keep changes scoped, preserve local-first behavior, and
-include proportional verification for generation lifecycle, persistence, accessibility, or responsive
-layout changes.
+## 许可与来源
 
-Do not commit API tokens, generated `.env` files, or private reference images.
+本项目使用 [MIT License](LICENSE)，基于 [NyaNovel](https://github.com/Nya-Foundation/NyaNovel) 继续开发，保留其原始版权声明。点数计算参考了 [Aaalice_NAI_Launcher](https://github.com/Aaalice233/Aaalice_NAI_Launcher)；完整来源和许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-## Troubleshooting
-
-### The token is rejected
-
-Create a fresh persistent token in NovelAI account settings and copy the complete value. If you use a
-custom host, verify both the host URL and the credential expected by that host.
-
-### My gallery is empty
-
-The gallery belongs to the exact browser profile and site origin where the images were generated.
-Check that site storage was not cleared and that you are using the same protocol, hostname, and port.
-
-### Shared links use the wrong host or protocol in their preview metadata
-
-Configure your reverse proxy to pass `Host` or `X-Forwarded-Host` and `X-Forwarded-Proto`. If that is
-not possible, set `SITE_URL` to the canonical public origin and restart the container. Rebuilding the
-image is not required.
-
-### Generation cannot reach a custom host
-
-Because requests originate in the browser, the custom host must accept requests from the NyaNovel
-deployment origin and expose the API behavior expected by `nekoai-js`.
-
-## Legal
-
-NyaNovel is an independent, unofficial project and is not affiliated with or endorsed by NovelAI or
-Anlatan. You are responsible for complying with NovelAI's terms, the rules of any configured API
-host, and all applicable laws. The software is provided without warranty.
-
-## License
-
-NyaNovel is released under the [MIT License](LICENSE). Copyright © 2025 Nya Foundation.
-
-Third-party packages remain subject to their own licenses. In particular, `nekoai-js` is distributed
-under the AGPL-3.0 license; see its upstream repository for details.
-
----
-
-<p align="center">
-  Made with care by the Nya Foundation.
-</p>
+Sakura NAI 的樱花标志与主题素材位于 [assets/brand](assets/brand/README.md)。本项目与 NovelAI 官方无隶属或背书关系。

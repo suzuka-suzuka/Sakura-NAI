@@ -1,10 +1,17 @@
-// UI option lists for the generation form. Values come straight from nekoai-js enums
-// (so they stay in sync with the SDK); labels mirror the wording of NovelAI's own UI.
-import { Model, Sampler, Noise, Resolution, EmotionOptions, RESOLUTION_DIMENSIONS } from "nekoai-js";
+// UI options backed by the application-owned NovelAI wire constants.
+import { Model, Sampler, Noise, Resolution, EmotionOptions, RESOLUTION_DIMENSIONS } from "./protocol";
 
 type Option<T extends string> = { value: T; label: string };
 
-export const MODEL_OPTIONS: Option<Model>[] = [
+export const V5_FULL = "nai-diffusion-5-full";
+export const V5_CURATED = "nai-diffusion-5-curated";
+export type GenerationModel = Model | typeof V5_FULL | typeof V5_CURATED;
+export const isV5Model = (model: string): model is typeof V5_FULL | typeof V5_CURATED =>
+  model === V5_FULL || model === V5_CURATED;
+
+export const MODEL_OPTIONS: Option<GenerationModel>[] = [
+  { value: V5_FULL, label: "NAI Diffusion V5 Full" },
+  { value: V5_CURATED, label: "NAI Diffusion V5 Curated" },
   { value: Model.V4_5, label: "NAI Diffusion V4.5 Full" },
   { value: Model.V4_5_CUR, label: "NAI Diffusion V4.5 Curated" },
   { value: Model.V4, label: "NAI Diffusion V4 Full" },
@@ -26,7 +33,21 @@ export const V4_MODELS = new Set<Model>([
   Model.V4_CUR,
 ]);
 
-export const isV4Model = (m: Model) => V4_MODELS.has(m);
+export const isV4Model = (m: GenerationModel) => V4_MODELS.has(m as Model);
+export const supportsCharacters = (m: GenerationModel) => isV4Model(m) || isV5Model(m);
+export const supportsStreaming = supportsCharacters;
+export const maxCharacters = (m: GenerationModel) => isV5Model(m) ? 22 : isV4Model(m) ? 6 : 0;
+
+/** Imported/processed images may be larger than the model canvas or not divisible by 64. */
+export function generationSize(width: number, height: number) {
+  const ratio = Math.min(1, 2048 / width, 2048 / height, Math.sqrt(3145728 / (width * height)));
+  let w = Math.max(64, Math.round(width * ratio / 64) * 64);
+  let h = Math.max(64, Math.round(height * ratio / 64) * 64);
+  while (w * h > 3145728) { if (w >= h) w -= 64; else h -= 64; }
+  return { width: w, height: h };
+}
+export const maxSamples = (m: GenerationModel, width: number, height: number) =>
+  !isV5Model(m) ? 8 : width * height <= 360448 ? 8 : width * height <= 409600 ? 6 : 4;
 
 export const SAMPLER_OPTIONS: Option<Sampler>[] = [
   { value: Sampler.EULER, label: "Euler" },
@@ -59,8 +80,7 @@ export type Aspect = (typeof ASPECTS)[number];
 
 type ResolutionPreset = { value: Resolution; label: string; w: number; h: number };
 
-// Derive the preset table from the SDK rather than duplicating every enum and dimension. The SDK
-// intentionally has no wallpaper-square entry, so that combination is filtered out.
+// Wallpaper has no square preset.
 const ALL_PRESETS: ResolutionPreset[] = SIZE_TIERS.flatMap((tier) =>
   ASPECTS.flatMap((aspect) => {
     const value = `${tier}_${aspect}` as Resolution;

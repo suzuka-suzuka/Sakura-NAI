@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { focusRing } from "@/components/ui/input";
@@ -38,6 +39,7 @@ type Props = {
  * 1000 previously sent an invalid request that failed server-side.
  */
 export function DimensionInput({ id, label, value, min, max, step, onCommit }: Props) {
+  useLocale();
   const inputRef = useRef<HTMLInputElement>(null);
   // While focused the field shows raw keystrokes; a half-typed "10" must not be snapped to 0 mid
   // entry, so the committed value is only derived on blur or Enter.
@@ -101,7 +103,7 @@ export function DimensionInput({ id, label, value, min, max, step, onCommit }: P
         <button
           type="button"
           tabIndex={-1}
-          aria-label={`Decrease ${label.toLowerCase()}`}
+          aria-label={translateUI("Decrease {0}", label.toLowerCase())}
           disabled={value <= min}
           onClick={() => nudge(-1)}
           className={cn(
@@ -124,7 +126,7 @@ export function DimensionInput({ id, label, value, min, max, step, onCommit }: P
           aria-valuemin={min}
           aria-valuemax={max}
           value={draft ?? value}
-          title="Drag to scrub · click to type"
+          title={translateUI("Drag to scrub · click to type")}
           onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
           onBlur={commitDraft}
           onKeyDown={(e) => {
@@ -158,7 +160,7 @@ export function DimensionInput({ id, label, value, min, max, step, onCommit }: P
         <button
           type="button"
           tabIndex={-1}
-          aria-label={`Increase ${label.toLowerCase()}`}
+          aria-label={translateUI("Increase {0}", label.toLowerCase())}
           disabled={value >= max}
           onClick={() => nudge(1)}
           className={cn(
@@ -175,13 +177,14 @@ export function DimensionInput({ id, label, value, min, max, step, onCommit }: P
 
 /** Aspect-lock toggle that sits between the two dimension fields. */
 export function AspectLock({ locked, onToggle }: { locked: boolean; onToggle: () => void }) {
+  useLocale();
   return (
     <button
       type="button"
       role="switch"
       aria-checked={locked}
-      aria-label="Lock aspect ratio"
-      title={locked ? "Aspect ratio locked — changing one side scales the other" : "Lock aspect ratio"}
+      aria-label={translateUI("Lock aspect ratio")}
+      title={locked ? translateUI("Aspect ratio locked — changing one side scales the other") : translateUI("Lock aspect ratio")}
       onClick={onToggle}
       className={cn(
         "mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-[7px] border transition-colors duration-instant",

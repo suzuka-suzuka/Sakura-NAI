@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // NyaNovel is a client-side app: the browser holds the NAI token and calls the
-  // NovelAI API directly via nekoai-js, and results live in IndexedDB. No server
+  // Sakura NAI is a client-side app: the browser holds the NAI token and calls the
+  // NovelAI API directly via the local request layer, and results live in IndexedDB. No server
   // image pipeline, so nothing to configure for next/image remote patterns yet.
   reactStrictMode: true,
   // Emit a self-contained server bundle for a small production Docker image.

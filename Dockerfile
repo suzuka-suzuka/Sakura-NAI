@@ -8,7 +8,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM build-base AS deps
 COPY --link package.json bun.lock ./
-RUN --mount=type=cache,id=nyanovel-bun,target=/root/.bun/install/cache,sharing=locked \
+RUN --mount=type=cache,id=sakura-nai-bun,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile --no-progress --no-summary
 
 # Source changes reuse the dependency layer; only package.json or bun.lock invalidates install.
@@ -30,9 +30,8 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 
-LABEL org.opencontainers.image.title="NyaNovel" \
-      org.opencontainers.image.description="A refined browser client for NovelAI image generation, built with Next.js and nekoai-js." \
-      org.opencontainers.image.source="https://github.com/Nya-Foundation/NyaNovel" \
+LABEL org.opencontainers.image.title="Sakura NAI" \
+      org.opencontainers.image.description="A cherry blossom themed NovelAI image studio with an application-owned API layer." \
       org.opencontainers.image.licenses="MIT"
 
 COPY --link --from=node-runtime /usr/local/bin/node /usr/local/bin/node
@@ -45,6 +44,7 @@ COPY --link --from=node-runtime /usr/lib/libgcc_s.so.1 /usr/lib/libstdc++.so.6* 
 COPY --link --from=builder --chown=65534:65534 /app/.next/standalone ./
 COPY --link --from=builder --chown=65534:65534 /app/.next/static ./.next/static
 COPY --link --from=builder --chown=65534:65534 /app/public ./public
+COPY --link --from=builder --chown=65534:65534 /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
 
 USER nobody
 EXPOSE 3000

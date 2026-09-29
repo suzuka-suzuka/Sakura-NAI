@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import { pickRecipeFile } from "@/lib/recipe-import";
 import { useStore } from "@/lib/store";
+import { useCompactLayout } from "@/lib/use-compact-layout";
 import { MODEL_OPTIONS, modelLabel } from "@/lib/nai/models";
 import { applyAccent, applyMode, currentMode, ACCENTS } from "@/lib/theme";
 import { spring, fade, usePrefersReducedMotion } from "@/lib/motion";
@@ -58,6 +60,8 @@ function score(query: string, target: string): number {
 }
 
 export function CommandPalette() {
+  const locale = useLocale();
+  const compact = useCompactLayout();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -103,6 +107,7 @@ export function CommandPalette() {
   }, [open, close, openPalette]);
 
   const commands = useMemo<Cmd[]>(() => {
+    void locale; // Rebuild translated labels when the language changes.
     const s = store.getState();
     const go = (fn: () => void) => () => {
       fn();
@@ -112,18 +117,18 @@ export function CommandPalette() {
     const list: Cmd[] = [
       {
         id: "generate",
-        label: isGenerating ? "Stop generation" : "Generate",
-        hint: isGenerating ? "Finished images are kept" : `${s.settings.nSamples} image${s.settings.nSamples === 1 ? "" : "s"}`,
+        label: isGenerating ? translateUI("Stop generation") : translateUI("Generate"),
+        hint: isGenerating ? translateUI("Finished images are kept") : translateUI("{0} image{1}", s.settings.nSamples, s.settings.nSamples === 1 ? "" : "s"),
         group: "Actions",
         icon: isGenerating ? <Square /> : <Sparkles />,
-        shortcut: "⌘↵",
+        shortcut: "Ctrl + Enter",
         keywords: "run render create make dream",
         run: go(() => (isGenerating ? s.cancelGenerate() : void s.generate())),
       },
       {
         id: "director",
-        label: "Director tools",
-        hint: "Upscale, line art, colorize…",
+        label: translateUI("Director tools"),
+        hint: translateUI("Upscale, line art, colorize…"),
         group: "Actions",
         icon: <Wand2 />,
         keywords: "upscale lineart sketch colorize declutter enhance emotion background",
@@ -131,8 +136,8 @@ export function CommandPalette() {
       },
       {
         id: "import-recipe",
-        label: "Import recipe from PNG…",
-        hint: "Or drop the file anywhere",
+        label: translateUI("Import recipe from PNG…"),
+        hint: translateUI("Or drop the file anywhere"),
         group: "Actions",
         icon: <FileImage />,
         keywords: "load restore novelai metadata drop open file",
@@ -140,7 +145,7 @@ export function CommandPalette() {
       },
       {
         id: "reuse",
-        label: "Reuse settings from current image",
+        label: translateUI("Reuse settings from current image"),
         group: "Actions",
         icon: <RotateCcw />,
         keywords: "recipe restore",
@@ -151,7 +156,7 @@ export function CommandPalette() {
       },
       {
         id: "seed-copy",
-        label: "Copy seed from current image",
+        label: translateUI("Copy seed from current image"),
         group: "Actions",
         icon: <Hash />,
         run: go(() => {
@@ -161,48 +166,55 @@ export function CommandPalette() {
       },
       {
         id: "seed-random",
-        label: seedLocked ? "Unlock seed (randomize)" : "Seed is already random",
+        label: seedLocked ? translateUI("Unlock seed (randomize)") : translateUI("Seed is already random"),
         group: "Actions",
         icon: <Dices />,
         keywords: "random dice unpin",
         run: go(() => s.patchSettings({ seed: 0 })),
       },
 
-      { id: "panel-settings", label: "Toggle settings panel", group: "Navigate", icon: <PanelLeftOpen />, shortcut: "[",
-        run: go(() => s.setUI({ settingsCollapsed: !s.settingsCollapsed })) },
-      { id: "panel-gallery", label: "Toggle gallery", group: "Navigate", icon: <Images />, shortcut: "]",
+      ...(compact ? [{ id: "panel-settings", label: translateUI("Toggle settings panel"), group: "Navigate", icon: <PanelLeftOpen />, shortcut: "[",
+        run: go(() => s.setUI({ settingsCollapsed: !s.settingsCollapsed, galleryOpen: false })) }] : []),
+      { id: "panel-gallery", label: translateUI("Toggle gallery"), group: "Navigate", icon: <Images />, shortcut: "]",
         run: go(() => s.setUI({ galleryOpen: !s.galleryOpen })) },
-      { id: "tab-basic", label: "Go to Basic settings", group: "Navigate", icon: <SlidersHorizontal />,
+      { id: "tab-basic", label: translateUI("Go to Basic settings"), group: "Navigate", icon: <SlidersHorizontal />,
         run: go(() => s.setUI({ settingsCollapsed: false, activeTab: "basic" })) },
-      { id: "tab-advanced", label: "Go to Advanced settings", group: "Navigate", icon: <SlidersHorizontal />,
+      { id: "tab-advanced", label: translateUI("Go to Advanced settings"), group: "Navigate", icon: <SlidersHorizontal />,
         keywords: "cfg scale noise threshold smea",
         run: go(() => s.setUI({ settingsCollapsed: false, activeTab: "advanced" })) },
-      { id: "tab-characters", label: "Go to Characters", group: "Navigate", icon: <Users />,
+      { id: "tab-characters", label: translateUI("Go to Characters"), group: "Navigate", icon: <Users />,
         keywords: "multi character position",
-        run: go(() => s.setUI({ settingsCollapsed: false, activeTab: "characters" })) },
-      { id: "connect", label: "Connection settings", group: "Navigate", icon: <KeyRound />,
+        run: go(() => {
+          s.setUI({ settingsCollapsed: false, activeTab: "basic" });
+          requestAnimationFrame(() => {
+            const section = document.getElementById("character-prompts");
+            section?.scrollIntoView({ block: "start" });
+            section?.focus({ preventScroll: true });
+          });
+        }) },
+      { id: "connect", label: translateUI("Connection settings"), group: "Navigate", icon: <KeyRound />,
         keywords: "token api key host proxy login auth",
         run: go(() => s.setUI({ showConnect: true })) },
 
       ...MODEL_OPTIONS.map((opt) => ({
         id: `model-${opt.value}`,
-        label: `Model · ${opt.label}`,
-        hint: opt.value === model ? "Current" : undefined,
+        label: translateUI("Model · {0}", opt.label),
+        hint: opt.value === model ? translateUI("Current") : undefined,
         group: "Model",
         icon: <Sparkles />,
         keywords: "switch diffusion",
         run: go(() => s.patchSettings({ model: opt.value })),
       })),
 
-      { id: "theme-dark", label: "Dark mode", group: "Appearance", icon: <Moon />, keywords: "theme night",
+      { id: "theme-dark", label: translateUI("Dark mode"), group: "Appearance", icon: <Moon />, keywords: "theme night",
         run: go(() => applyMode("dark")) },
-      { id: "theme-light", label: "Light mode", group: "Appearance", icon: <Sun />, keywords: "theme day bright",
+      { id: "theme-light", label: translateUI("Light mode"), group: "Appearance", icon: <Sun />, keywords: "theme day bright",
         run: go(() => applyMode("light")) },
-      { id: "theme-toggle", label: "Toggle dark / light", group: "Appearance", icon: <Palette />,
+      { id: "theme-toggle", label: translateUI("Toggle dark / light"), group: "Appearance", icon: <Palette />,
         run: go(() => applyMode(currentMode() === "dark" ? "light" : "dark")) },
       ...ACCENTS.map((a) => ({
         id: `accent-${a.key}`,
-        label: `Accent · ${a.label}`,
+        label: translateUI("Accent · {0}", translateUI(a.label)),
         group: "Appearance",
         icon: (
           <span className="size-3.5 rounded-full ring-1 ring-black/20" style={{ background: a.swatch }} />
@@ -215,8 +227,8 @@ export function CommandPalette() {
     if (images.length) {
       list.push({
         id: "clear-gallery",
-        label: "Clear entire gallery",
-        hint: `${images.length} images · permanent`,
+        label: translateUI("Clear entire gallery"),
+        hint: translateUI("{0} images · permanent", images.length),
         group: "Danger",
         icon: <Trash2 />,
         keywords: "delete all wipe",
@@ -225,7 +237,7 @@ export function CommandPalette() {
     }
 
     return list;
-  }, [store, close, isGenerating, model, seedLocked, images.length]);
+  }, [store, close, isGenerating, model, seedLocked, images.length, locale, compact]);
 
   /**
    * Gallery results are searched separately: they're matched on prompt text (what a user actually
@@ -273,6 +285,7 @@ export function CommandPalette() {
    * here is what keeps the highlight from desyncing from the keyboard cursor.
    */
   const sections = useMemo(() => {
+    void locale;
     let n = 0;
     const out: { title: string; rows: ({ idx: number } & (typeof flat)[number])[] }[] = [];
     for (const group of GROUPS) {
@@ -283,13 +296,13 @@ export function CommandPalette() {
     }
     if (imageHits.length) {
       out.push({
-        title: "From your gallery",
+        title: translateUI("From your gallery"),
         rows: imageHits.map((img) => ({ idx: n++, kind: "image" as const, img })),
       });
     }
     return out;
     // `flat` appears above only as a type, never as a value — it is deliberately not a dependency.
-  }, [results, imageHits]);
+  }, [results, imageHits, locale]);
 
   // Clamped at read time rather than corrected in an effect: filtering can shrink the list below
   // the stored index, and a render-phase clamp avoids a frame where `active` points past the end.
@@ -300,7 +313,7 @@ export function CommandPalette() {
     if (!item) return;
     if (item.kind === "cmd") item.cmd.run();
     else {
-      store.getState().selectBatch(item.img.batchId, true);
+      store.getState().selectBatch(item.img.batchId);
       close();
     }
   };
@@ -351,7 +364,7 @@ export function CommandPalette() {
             ref={panelRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Command palette"
+            aria-label={translateUI("Command palette")}
             className="relative w-full max-w-[560px] overflow-hidden rounded-[var(--radius-card-lg)] border border-border bg-surface shadow-[var(--shadow-pop)]"
             variants={{
               hidden: { opacity: 0, scale: reduced ? 1 : 0.96, y: reduced ? 0 : -8 },
@@ -369,8 +382,8 @@ export function CommandPalette() {
                   setQuery(e.target.value);
                   setActive(0);
                 }}
-                placeholder="Search commands, models, or your gallery…"
-                aria-label="Search commands"
+                placeholder={translateUI("Search commands, models, or your gallery…")}
+                aria-label={translateUI("Search commands")}
                 aria-controls="cmdk-list"
                 aria-activedescendant={flat.length ? `cmdk-opt-${active}` : undefined}
                 className="h-13 min-w-0 flex-1 bg-transparent py-4 text-[14.5px] text-fg outline-none placeholder:text-muted"
@@ -384,19 +397,19 @@ export function CommandPalette() {
               ref={listRef}
               id="cmdk-list"
               role="listbox"
-              aria-label="Results"
+              aria-label={translateUI("Results")}
               className="max-h-[52vh] overflow-y-auto overscroll-contain p-1.5"
             >
               {flat.length === 0 && (
                 <p className="px-3 py-8 text-center text-[13px] text-muted">
-                  Nothing matches “{query}”.
+                  {translateUI(" Nothing matches “")}{query}”.
                 </p>
               )}
 
               {sections.map((section) => (
                 <div key={section.title} className="mb-1 last:mb-0">
                   <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted">
-                    {section.title}
+                    {translateUI(section.title)}
                   </p>
                   {section.rows.map((row) => {
                     const isActive = row.idx === activeIdx;
@@ -462,7 +475,7 @@ export function CommandPalette() {
                             />
                             <span className="relative z-10 min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-medium">
-                                {row.img.settings.prompt || "Untitled generation"}
+                                {row.img.settings.prompt || translateUI("Untitled generation")}
                               </span>
                               <span className="block truncate font-[family-name:var(--font-mono)] text-[10.5px] text-muted">
                                 {modelLabel(row.img.settings.model, true)} · {row.img.settings.width}×
@@ -482,14 +495,12 @@ export function CommandPalette() {
               <span className="flex items-center gap-3">
                 <span className="flex items-center gap-1">
                   <kbd className="rounded-[5px] border border-border-soft bg-surface px-1 font-[family-name:var(--font-mono)]">↑↓</kbd>
-                  navigate
-                </span>
+                  {translateUI(" navigate ")}</span>
                 <span className="flex items-center gap-1">
                   <kbd className="rounded-[5px] border border-border-soft bg-surface px-1 font-[family-name:var(--font-mono)]">↵</kbd>
-                  run
-                </span>
+                  {translateUI(" run ")}</span>
               </span>
-              <span className="font-[family-name:var(--font-mono)]">{flat.length} result{flat.length === 1 ? "" : "s"}</span>
+              <span className="font-[family-name:var(--font-mono)]">{flat.length} {locale === "zh-CN" ? "条结果" : `result${flat.length === 1 ? "" : "s"}`}</span>
             </div>
           </motion.div>
         </motion.div>

@@ -6,13 +6,14 @@
  * and the `nya-theme-change` event (which AppToaster listens on) to drift apart.
  *
  * The inline no-flash script in app/layout.tsx reads the same two keys before first paint.
+ * Legacy storage keys are retained so existing preferences survive the Sakura rebrand.
  */
 
 export type Mode = "dark" | "light";
 
 export const ACCENTS = [
-  { key: "default", label: "Signal Coral", swatch: "#f35f52" },
-  { key: "blue", label: "Signal Blue", swatch: "oklch(0.62 0.15 255)" },
+  { key: "default", label: "Sakura Pink", swatch: "#f3a5bd" },
+  { key: "blue", label: "Sky Blue", swatch: "oklch(0.62 0.15 255)" },
   { key: "violet", label: "Violet", swatch: "oklch(0.6 0.17 292)" },
   { key: "emerald", label: "Emerald", swatch: "oklch(0.6 0.12 165)" },
   { key: "magenta", label: "Magenta", swatch: "oklch(0.62 0.18 350)" },

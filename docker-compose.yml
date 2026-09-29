@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      # Optional canonical origin. Without it, NyaNovel uses Host/X-Forwarded-* per request.
+      # Optional canonical origin. Without it, Sakura NAI uses Host/X-Forwarded-* per request.
       SITE_URL: ${SITE_URL:-}
     ports:
       - "8080:3000"

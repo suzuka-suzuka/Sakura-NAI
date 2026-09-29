@@ -1,12 +1,13 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Dices, Lock, LockOpen } from "lucide-react";
 import { useStore } from "@/lib/store";
 import {
   MODEL_OPTIONS,
+  isV5Model, maxSamples,
   SAMPLER_OPTIONS,
-  UC_PRESET_OPTIONS,
   SIZE_TIERS,
   presetDims,
   tierAspectForSize,
@@ -19,7 +20,9 @@ import { AspectLock, DimensionInput } from "./dimension-input";
 import { Select } from "@/components/ui/select";
 import { NumberInput } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { SwitchRow } from "@/components/ui/switch";
+import { PresetSelect } from "./preset-select";
+import { CharactersTab } from "./characters-tab";
+import { QUALITY_PRESETS, NEGATIVE_PRESETS, qualityPreset, type QualityPreset, type NegativePreset } from "@/lib/nai/presets";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,6 +39,7 @@ const scaleTo = (next: number, prev: number, other: number) =>
   Math.min(2048, Math.max(64, Math.round((other * (next / prev)) / 64) * 64));
 
 export function BasicTab() {
+  useLocale();
   const s = useStore((st) => st.settings);
   const patch = useStore((st) => st.patchSettings);
   const lastSeed = useStore((st) => st.selectedImage?.seed);
@@ -56,44 +60,61 @@ export function BasicTab() {
 
   return (
     <>
-      <Section title="Model">
+      <Section title={translateUI("Model")}>
         <Select value={s.model} onChange={(e) => patch({ model: e.target.value as typeof s.model })}>
           {MODEL_OPTIONS.map((m) => (
             <option key={m.value} value={m.value}>
-              {m.label}
+              {translateUI(m.label)}
             </option>
           ))}
         </Select>
       </Section>
 
-      <Section title="Prompt">
-        <Field htmlFor="prompt">
+      <Section title={translateUI("Prompt")}>
+        <div className="rounded-[var(--radius-input)] border border-border bg-surface-2 focus-within:border-accent/60" data-testid="positive-prompt-editor">
           <TagTextarea
             id="prompt"
-            aria-label="Prompt"
-            placeholder="1girl, cherry blossoms, soft light, masterpiece…"
+            className="min-h-[112px] rounded-b-none border-0 bg-transparent focus:shadow-none"
+            aria-label={translateUI("Prompt")}
             value={s.prompt}
             onChange={(prompt) => patch({ prompt })}
           />
-        </Field>
-        <Field label="Undesired content" htmlFor="uc">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 pb-2.5 pt-1" data-testid="positive-prompt-footer">
+            {isV5Model(s.model) && <label className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-3 px-2.5 py-1 text-[11.5px] font-medium text-fg-2">
+              <input type="checkbox" className="size-3.5 cursor-pointer accent-accent" checked={s.transparentBackground} onChange={e => patch({ transparentBackground: e.target.checked })} />
+              {translateUI("Transparent background")}
+            </label>}
+            <div className="ml-auto">
+              <PresetSelect label={translateUI("Quality preset")} prefix={translateUI("Quality tags")} value={qualityPreset(s)} options={QUALITY_PRESETS} onChange={value => patch({ qualityPreset: value as QualityPreset, qualityToggle: value !== "none" })} />
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title={translateUI("Undesired content")}>
+        <div className="rounded-[var(--radius-input)] border border-border bg-surface-2 focus-within:border-accent/60" data-testid="negative-prompt-editor">
           <TagTextarea
             id="uc"
-            className="min-h-[64px]"
-            placeholder="lowres, bad anatomy, worst quality…"
+            aria-label={translateUI("Undesired content")}
+            className="min-h-[96px] rounded-b-none border-0 bg-transparent focus:shadow-none"
             value={s.negativePrompt}
             onChange={(negativePrompt) => patch({ negativePrompt })}
           />
-        </Field>
+          <div className="flex justify-end px-2.5 pb-2.5 pt-1" data-testid="negative-prompt-footer">
+            <PresetSelect label={translateUI("Undesired content preset")} prefix={translateUI("Negative tags")} value={String(s.ucPreset)} options={NEGATIVE_PRESETS} onChange={value => patch({ ucPreset: Number(value) as NegativePreset })} />
+          </div>
+        </div>
       </Section>
 
-      <Section title="Resolution">
+      <CharactersTab />
+
+      <Section title={translateUI("Resolution")}>
         <div className="mb-3 flex flex-col gap-2">
           {/* Only the aspects this tier actually has — Wallpaper has no Square, and offering it
               made clicking Wallpaper silently rewrite your aspect. */}
           <Segmented
             className="w-full"
-            aria-label="Aspect ratio"
+            aria-label={translateUI("Aspect ratio")}
             options={aspectsForTier(tier ?? "normal").map((a) => ({ value: a as string, label: cap(a) }))}
             value={aspect ?? ""}
             onValueChange={(a) => setPreset(tier ?? "normal", a)}
@@ -102,10 +123,10 @@ export function BasicTab() {
               rendering bug. "Custom" gives that state a name; re-clicking returns to the last preset. */}
           <Segmented
             className="w-full"
-            aria-label="Size"
+            aria-label={translateUI("Size")}
             options={[
               ...SIZE_TIERS.map((t) => ({ value: t as string, label: cap(t) })),
-              ...(tier === null ? [{ value: "custom", label: "Custom" }] : []),
+              ...(tier === null ? [{ value: "custom", label: translateUI("Custom") }] : []),
             ]}
             value={tier ?? "custom"}
             onValueChange={(t) => {
@@ -120,7 +141,7 @@ export function BasicTab() {
         <div className="flex items-end gap-2">
           <DimensionInput
             id="w"
-            label="Width"
+            label={translateUI("Width")}
             min={64}
             max={2048}
             step={64}
@@ -130,7 +151,7 @@ export function BasicTab() {
           <AspectLock locked={linked} onToggle={() => setLinked((v) => !v)} />
           <DimensionInput
             id="h"
-            label="Height"
+            label={translateUI("Height")}
             min={64}
             max={2048}
             step={64}
@@ -159,15 +180,15 @@ export function BasicTab() {
         </div>
       </Section>
 
-      <Section title="Sampling">
-        <Field label="Seed">
+      <Section title={translateUI("Sampling")}>
+        <Field label={translateUI("Seed")}>
           <div className="flex gap-2">
             <NumberInput
               min={0}
               max={MAX_SEED}
               disabled={isRandom}
               value={isRandom ? "" : s.seed}
-              placeholder={lastSeed !== undefined ? `random · last ${lastSeed}` : "random"}
+              placeholder={lastSeed !== undefined ? translateUI("random · last {0}", lastSeed) : translateUI("random")}
               onChange={(e) => patch({ seed: Number(e.target.value) })}
               className="flex-1"
             />
@@ -177,8 +198,8 @@ export function BasicTab() {
             <Button
               variant="outline"
               size="icon"
-              aria-label="Roll a new seed"
-              title="Roll a new seed"
+              aria-label={translateUI("Roll a new seed")}
+              title={translateUI("Roll a new seed")}
               onClick={() => patch({ seed: Math.floor(Math.random() * MAX_SEED) })}
             >
               <Dices className="size-4" />
@@ -186,8 +207,8 @@ export function BasicTab() {
             <Button
               variant="outline"
               size="icon"
-              aria-label={isRandom ? "Seed is random — click to pin" : "Seed is pinned — click to randomize"}
-              title={isRandom ? "Seed is random — click to pin" : "Seed is pinned — click to randomize"}
+              aria-label={isRandom ? translateUI("Seed is random — click to pin") : translateUI("Seed is pinned — click to randomize")}
+              title={isRandom ? translateUI("Seed is random — click to pin") : translateUI("Seed is pinned — click to randomize")}
               className={cn(!isRandom && "border-accent text-accent")}
               onClick={() => patch({ seed: isRandom ? Math.floor(Math.random() * MAX_SEED) : -1 })}
             >
@@ -196,41 +217,22 @@ export function BasicTab() {
           </div>
         </Field>
         <Field>
-          <Slider label="Batch size" min={1} max={8} value={s.nSamples} onValueChange={(v) => patch({ nSamples: v })} format={(v) => `${v} image${v > 1 ? "s" : ""}`} />
+          <Slider label={translateUI("Batch size")} min={1} max={maxSamples(s.model, s.width, s.height)} value={s.nSamples} onValueChange={(v) => patch({ nSamples: v })} format={(v) => translateUI("{0} image{1}", v, v > 1 ? "s" : "")} />
         </Field>
-        <Field hint="More steps means finer detail and a slower run. 23–28 is typical.">
-          <Slider label="Steps" showRange min={1} max={50} value={s.steps} onValueChange={(v) => patch({ steps: v })} />
+        <Field hint={translateUI("More steps means finer detail and a slower run. 23–28 is typical.")}>
+          <Slider label={translateUI("Steps")} showRange min={1} max={50} value={s.steps} onValueChange={(v) => patch({ steps: v })} />
         </Field>
-        <Field label="Sampler" htmlFor="sampler">
+        <Field label={translateUI("Sampler")} htmlFor="sampler">
           <Select id="sampler" value={s.sampler} onChange={(e) => patch({ sampler: e.target.value as typeof s.sampler })}>
             {SAMPLER_OPTIONS.map((m) => (
               <option key={m.value} value={m.value}>
-                {m.label}
+                {translateUI(m.label)}
               </option>
             ))}
           </Select>
         </Field>
       </Section>
 
-      <Section title="Quality">
-        <Field>
-          <SwitchRow
-            label="Quality tags"
-            hint="Append model quality tags"
-            checked={s.qualityToggle}
-            onCheckedChange={(v) => patch({ qualityToggle: v })}
-          />
-        </Field>
-        <Field label="Undesired content preset" htmlFor="ucpreset">
-          <Select id="ucpreset" value={String(s.ucPreset)} onChange={(e) => patch({ ucPreset: Number(e.target.value) as 0 | 1 | 2 | 3 })}>
-            {UC_PRESET_OPTIONS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </Section>
     </>
   );
 }

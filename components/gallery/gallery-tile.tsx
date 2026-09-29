@@ -1,5 +1,6 @@
 "use client";
 
+import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Hash, RotateCcw, Layers } from "lucide-react";
@@ -12,11 +13,11 @@ export type GalleryBatchPreview = GalleryImage & { count: number; siblings: Gall
 
 function relativeTime(iso: string) {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return translateUI("just now");
+  if (mins < 60) return translateUI("{0}m ago", mins);
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+  if (hours < 24) return translateUI("{0}h ago", hours);
+  return translateUI("{0}d ago", Math.round(hours / 24));
 }
 
 export function GalleryTile({
@@ -32,8 +33,9 @@ export function GalleryTile({
   onRestore: () => void;
   onUseSeed: () => void;
 }) {
+  useLocale();
   const age = relativeTime(batch.timestamp);
-  const prompt = batch.settings.prompt || "Untitled generation";
+  const prompt = batch.settings.prompt || translateUI("Untitled generation");
   const reduced = usePrefersReducedMotion();
 
   const multi = batch.count > 1;
@@ -81,7 +83,7 @@ export function GalleryTile({
         type="button"
         onClick={onOpen}
         title={prompt}
-        aria-label={`Load batch of ${batch.count} and its recipe, seed ${batch.seed}, ${age}`}
+        aria-label={translateUI("View batch of {0}, seed {1}, {2}", batch.count, batch.seed, age)}
         className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
       >
         {/* The real aspect ratio, not a forced square — this is what turns the two-column grid into
@@ -144,10 +146,10 @@ export function GalleryTile({
       </button>
 
       <div className="pointer-events-none absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity duration-fast group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
-        <IconButton variant="overlay" size="sm" label="Use these settings" onClick={onRestore}>
+        <IconButton variant="overlay" size="sm" label={translateUI("Use these settings")} onClick={onRestore}>
           <RotateCcw />
         </IconButton>
-        <IconButton variant="overlay" size="sm" label="Use this seed" onClick={onUseSeed}>
+        <IconButton variant="overlay" size="sm" label={translateUI("Use this seed")} onClick={onUseSeed}>
           <Hash />
         </IconButton>
       </div>
