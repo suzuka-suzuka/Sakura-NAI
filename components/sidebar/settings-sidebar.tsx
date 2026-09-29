@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Menu, X, ChevronDown, RotateCcw, KeyRound, Settings2, PanelLeftClose, Dices, Hash, BookOpen, Wand2 } from "lucide-react";
+import { Menu, X, ChevronDown, RotateCcw, KeyRound, Settings2, PanelLeftClose, Dices, Hash, Wand2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { translateUI as t, useLocale } from "@/lib/i18n";
 import { SAMPLER_OPTIONS, NOISE_OPTIONS, isV5Model, isV4Model } from "@/lib/nai/models";
@@ -71,7 +71,6 @@ export function SettingsSidebar() {
         <Button variant="secondary" className="w-full justify-start" onClick={() => setUI({ showConnect: true })}><KeyRound />{t("Connection settings")}</Button>
         <Button variant="secondary" className="w-full justify-start" onClick={() => setUI({ activeTab: "advanced" })}><Settings2 />{t("Settings")}</Button>
         <Button variant="secondary" className="w-full justify-start" onClick={() => setUI({ showDirector: true })}><Wand2 />{t("Director tools")}</Button>
-        <a href="https://docs.novelai.net/en/image/" target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded bg-surface-2 p-3 text-sm"><BookOpen className="size-4" />{t("Documentation")}</a>
         <div className="flex items-center justify-between border-t border-border-soft pt-4"><LanguageSwitch /><ThemeControls /></div>
       </div> : <OfficialComposer />}
     </div>
@@ -94,7 +93,6 @@ export function SettingsSidebar() {
         <SwitchRow label={t("Streaming preview")} hint={t("When off, keep the previous image until the new batch is complete.")} checked={prefs.streamPreview} onCheckedChange={streamPreview => patchPrefs({ streamPreview })} />
         <SwitchRow label={t("Confirm paid generation")} hint={t("Ask once when switching from 0 points to a paid generation.")} checked={prefs.confirmPaid} onCheckedChange={confirmPaid => patchPrefs({ confirmPaid })} />
         <SwitchRow label={t("Auto text")} hint={t('Collect quoted text into a Text: block. A manual Text: block takes precedence.')} checked={s.autoText} onCheckedChange={autoText => patch({ autoText })} />
-        <div className="flex justify-between"><LanguageSwitch /><ThemeControls /></div>
       </div>
     </Modal>
   </div>;

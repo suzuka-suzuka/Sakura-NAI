@@ -30,7 +30,10 @@ function hostLabel(raw: string): string {
 export function ConnectModal() {
   useLocale();
   const show = useStore((s) => s.showConnect);
-  const connected = useStore((s) => Boolean(s.client));
+  const dismissible = useStore((s) => Boolean(s.client));
+  const status = useStore((s) => s.connectionStatus);
+  const connectionError = useStore((s) => s.connectionError);
+  const connected = status === "ok";
   const existing = useStore((s) => s.connection);
   const connect = useStore((s) => s.connect);
   const setUI = useStore((s) => s.setUI);
@@ -40,8 +43,10 @@ export function ConnectModal() {
   const [maxRetries, setMaxRetries] = useState(existing?.maxRetries ?? DEFAULT_CONNECTION.maxRetries);
   const [baseDelay, setBaseDelay] = useState(existing?.baseDelay ?? DEFAULT_CONNECTION.baseDelay);
   const [advanced, setAdvanced] = useState(false);
-  const [rejected, setRejected] = useState(false);
-  const verifying = useStore((s) => s.connectionStatus === "verifying");
+  const [edited, setEdited] = useState(false);
+  const verifying = status === "verifying";
+  const error = edited ? null : connectionError;
+  const rejected = !!error && status === "invalid";
 
   /**
    * Re-seed the form every time the dialog opens.
@@ -64,7 +69,7 @@ export function ConnectModal() {
       setHost(existing?.host ?? DEFAULT_CONNECTION.host);
       setMaxRetries(existing?.maxRetries ?? DEFAULT_CONNECTION.maxRetries);
       setBaseDelay(existing?.baseDelay ?? DEFAULT_CONNECTION.baseDelay);
-      setRejected(false);
+      setEdited(false);
       // Expand Advanced when the saved host isn't the default, so a configured proxy is visible
       // instead of hidden behind a collapsed toggle that looks like it holds nothing.
       setAdvanced(Boolean(existing) && existing?.host !== DEFAULT_CONNECTION.host);
@@ -75,31 +80,26 @@ export function ConnectModal() {
   const isDirect = (host.trim() || DEFAULT_CONNECTION.host) === DEFAULT_CONNECTION.host;
 
   const submit = async () => {
+    if (verifying) return;
     if (!token.trim()) {
-      setRejected(false);
       toast.error(isDirect ? translateUI("Please enter your NovelAI API token") : translateUI("Please enter your access key"));
       return;
     }
-    setRejected(false);
+    setEdited(false);
     const ok = await connect({
       token: token.trim(),
       host: host.trim() || DEFAULT_CONNECTION.host,
       maxRetries,
       baseDelay,
     });
-    // The failure belongs next to the field you have to fix, not in a corner toast that fades
-    // while you're still looking at the input.
-    if (!ok) {
-      setRejected(true);
-      return;
-    }
+    if (!ok) return;
     toast.success(isDirect ? translateUI("Connected to NovelAI") : translateUI("Connected"));
   };
 
   return (
     <Modal
       open={show}
-      dismissible={connected}
+      dismissible={dismissible}
       onClose={() => setUI({ showConnect: false })}
       ariaLabel={translateUI("Welcome to Sakura NAI — connect to start generating")}
       className="max-w-md"
@@ -108,7 +108,7 @@ export function ConnectModal() {
       <div className="mb-5 flex flex-col items-center text-center">
         <BrandLogo variant="mark" className="mb-3 size-14" />
         <h2 className="font-[family-name:var(--font-display)] text-[21px] font-bold tracking-[-0.02em] text-fg">
-          {connected ? translateUI("Connection settings") : translateUI("Welcome to Sakura NAI")}
+          {existing ? translateUI("Connection settings") : translateUI("Welcome to Sakura NAI")}
         </h2>
         {/* The destination is user-configurable, so the privacy claim has to follow it. Saying
             "straight to NovelAI" while Host URL points at a proxy would be a false statement about
@@ -118,9 +118,9 @@ export function ConnectModal() {
             "paste your token to start" implies the saved one is gone and invites them to hunt down
             a credential they don't need. */}
         <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted">
-          {connected ? (
+          {existing ? (
             <>
-              {translateUI(" Your ")}{isDirect ? translateUI("token") : translateUI("access key")} {translateUI(" is saved in this browser and already in use. Edit it below only if you want to change it. ")}</>
+              {translateUI("Review the host and access key below, then connect to verify them.")}</>
           ) : isDirect ? (
             <>
               {translateUI(" Paste your NovelAI token to start. It's stored only in this browser and sent straight to NovelAI — never to us. ")}</>
@@ -130,7 +130,7 @@ export function ConnectModal() {
           )}
         </p>
 
-        {connected && (
+        {connected && !edited && (
           <span className="mt-3 flex max-w-full items-center gap-2 rounded-[var(--radius-pill)] border border-border-soft bg-surface-2 px-2.5 py-1 text-[11.5px] text-fg-2">
             <span className="size-2 shrink-0 rounded-full bg-ok" style={{ boxShadow: "0 0 8px var(--ok)" }} />
             <span className="truncate font-[family-name:var(--font-mono)]">
@@ -151,20 +151,19 @@ export function ConnectModal() {
               placeholder={isDirect ? "pst-..." : translateUI("your access key")}
               className="pl-9 font-[family-name:var(--font-mono)] text-[13px]"
               value={token}
+              disabled={verifying}
               aria-invalid={rejected || undefined}
-              aria-describedby={rejected ? "nai-token-error" : undefined}
+              aria-describedby={error ? "nai-token-error" : undefined}
               onChange={(e) => {
                 setToken(e.target.value);
-                if (rejected) setRejected(false);
+                setEdited(true);
               }}
               onKeyDown={(e) => e.key === "Enter" && void submit()}
             />
           </div>
-          {rejected && (
-            <p id="nai-token-error" role="alert" className="mt-1.5 text-[12.5px] text-danger">
-              {isDirect
-                ? translateUI("NovelAI rejected that token. Copy it again from your account settings — it starts with pst-.")
-                : translateUI("The host rejected that access key. Check the key and the host URL below.")}
+          {error && (
+            <p id="nai-token-error" role="alert" className={`mt-1.5 text-[12.5px] ${rejected ? "text-danger" : "text-warn"}`}>
+              {translateUI(error)}
             </p>
           )}
         </div>
@@ -189,7 +188,7 @@ export function ConnectModal() {
           <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border-soft bg-surface-2 p-4">
             <div>
               <Label htmlFor="nai-host">{translateUI("Host URL")}</Label>
-              <Input id="nai-host" value={host} onChange={(e) => setHost(e.target.value)} />
+              <Input id="nai-host" value={host} disabled={verifying} onChange={(e) => { setHost(e.target.value); setEdited(true); }} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -199,6 +198,7 @@ export function ConnectModal() {
                   min={0}
                   max={10}
                   value={maxRetries}
+                  disabled={verifying}
                   onChange={(e) => setMaxRetries(Number(e.target.value))}
                 />
               </div>
@@ -209,6 +209,7 @@ export function ConnectModal() {
                   min={500}
                   step={500}
                   value={baseDelay}
+                  disabled={verifying}
                   onChange={(e) => setBaseDelay(Number(e.target.value))}
                 />
               </div>

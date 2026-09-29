@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 export function SiteHeader() {
   useLocale();
   const status = useStore((s) => s.connectionStatus);
+  const connectionError = useStore((s) => s.connectionError);
   const isPreparing = useStore(s => s.isPreparing);
   const isGenerating = useStore((s) => s.isGenerating);
   const imageCount = useStore((s) => s.images.length);
@@ -26,7 +27,7 @@ export function SiteHeader() {
   const connected = status === "ok";
 
   const connectionLabel =
-    status === "verifying" ? translateUI("Checking") : status === "invalid" ? translateUI("Reconnect") : connected ? translateUI("Connected") : translateUI("Connect");
+    status === "verifying" ? translateUI("Checking") : status === "invalid" ? translateUI("Reconnect") : status === "unknown" ? translateUI("Unverified") : connected ? translateUI("Connected") : translateUI("Connect");
 
   return (
     <header className="relative z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-surface/95 px-2.5 shadow-[0_1px_0_0_var(--border-soft)] backdrop-blur-xl sm:px-4">
@@ -100,7 +101,7 @@ export function SiteHeader() {
           type="button"
           onClick={() => setUI({ showConnect: true })}
           aria-label={connectionLabel}
-          title={connectionLabel}
+          title={connectionError ? translateUI(connectionError) : connectionLabel}
           className={cn(
             "flex h-9 items-center gap-2 rounded-[var(--radius-pill)] border border-border-soft bg-surface-2 px-2.5 text-[12.5px] font-medium text-fg-2 transition-colors duration-instant hover:bg-surface-3 hover:text-fg sm:px-3",
             focusRing,

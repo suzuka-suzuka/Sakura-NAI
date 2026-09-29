@@ -37,6 +37,8 @@ bun run dev
 
 Open [http://localhost:3000](http://localhost:3000) and enter your NovelAI API token in the connection dialog. For another API host, expand the advanced connection settings. Custom hosts must support the NovelAI endpoints used by this client and allow browser requests through CORS.
 
+Both official and custom hosts are verified through `/user/subscription`, which also loads account allowances. The UI shows **Connected** only after receiving valid account data and verifies again on reload. Invalid or disabled keys prompt you to reconnect. Network errors, rate limits, service failures, or unsupported account queries show **Unverified** and keep your configuration available for retry.
+
 If only Node.js is installed, you can invoke Bun through npm to install dependencies:
 
 ```bash

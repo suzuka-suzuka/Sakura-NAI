@@ -6,6 +6,7 @@ import { base64ToBytes, Image as NaiImage } from "@/lib/nai/protocol";
 import { buildPayload } from "@/lib/nai/payload";
 import { DEFAULT_PREFERENCES, loadGenerationPreferences, saveGenerationPreferences, estimateCost, type AccountInfo, type GenerationPreferences } from "@/lib/nai/cost";
 import { create } from "zustand";
+import { AccountQueryError } from "@/lib/nai/account";
 import { toast } from "sonner";
 import {
   NaiClient,
@@ -13,7 +14,6 @@ import {
   loadConnection,
   saveConnection,
   clearConnection,
-  verifyToken,
   loadSettings,
   saveSettings,
   loadUIPrefs,
@@ -67,9 +67,10 @@ type Store = {
   // ---- connection ----
   connection: ConnectionConfig | null;
   client: NaiClient | null;
-  /** Resolves false when the token was hard-rejected; the modal stays open and explains. */
+  /** Only a verified account resolves true. Other outcomes stay visible in the connection form. */
   connect: (cfg: ConnectionConfig) => Promise<boolean>;
-  connectionStatus: "idle" | "verifying" | "ok" | "invalid";
+  connectionStatus: "idle" | "verifying" | "ok" | "invalid" | "unknown";
+  connectionError: string | null;
   disconnect: () => void;
 
   // ---- settings ----
@@ -160,21 +161,22 @@ export const useStore = create<Store>()((set, get) => ({
   connection: null,
   client: null,
   connectionStatus: "idle",
+  connectionError: null,
   connect: async (cfg) => {
-    set({ connectionStatus: "verifying" });
-    const verdict = await verifyToken(cfg);
-    if (verdict === "invalid") {
-      set({ connectionStatus: "invalid" });
-      return false;
-    }
+    cfg = { ...cfg, host: cfg.host.trim().replace(/\/+$/, ""), token: cfg.token.trim() };
+    const client = new NaiClient(cfg);
+    set({ connection: cfg, client, account: null, paidAcknowledged: false, pendingPayment: null, connectionStatus: "verifying", connectionError: null });
+    await get().refreshAccount();
+    // An older request must not save credentials or close a newer connection attempt.
+    if (get().client !== client) return false;
     saveConnection(cfg);
-    set({ connection: cfg, client: new NaiClient(cfg), account: null, paidAcknowledged: false, pendingPayment: null, showConnect: false, connectionStatus: "ok" });
-    void get().refreshAccount();
-    return true;
+    const verified = get().connectionStatus === "ok";
+    if (verified) set({ showConnect: false });
+    return verified;
   },
   disconnect: () => {
     clearConnection();
-    set({ connection: null, client: null, account: null, paidAcknowledged: false, pendingPayment: null, connectionStatus: "idle" });
+    set({ connection: null, client: null, account: null, accountLoading: false, paidAcknowledged: false, pendingPayment: null, connectionStatus: "idle", connectionError: null });
   },
 
   // ---- settings ----
@@ -394,11 +396,18 @@ export const useStore = create<Store>()((set, get) => ({
     const promise = (async () => {
       try {
         const account = await client.account();
-        if (get().client === client) set({ account });
-      } catch {
-        if (get().client === client) set({ account: null });
+        if (get().client === client) set({ account, connectionStatus: "ok", connectionError: null });
+      } catch (error) {
+        if (get().client === client) {
+          const invalid = error instanceof AccountQueryError && error.status === 401;
+          const running = get().isGenerating || get().isDirectorProcessing;
+          set({ account: null, connectionStatus: invalid ? "invalid" : "unknown",
+            connectionError: error instanceof AccountQueryError ? error.message : "Cannot reach the server. Check the address, network and allowed origins.",
+            ...(invalid ? { pendingPayment: null, ...(!running ? { client: null, showConnect: true } : {}) } : {}),
+          });
+        }
       } finally {
-        if (get().client === client) set({ accountLoading: false });
+        if (get().client === client || (accountRequest?.client === client && !get().client)) set({ accountLoading: false });
         if (accountRequest?.client === client) accountRequest = null;
       }
     })();
@@ -438,7 +447,7 @@ export const useStore = create<Store>()((set, get) => ({
     const { client } = get();
     const settings = approved?.settings ?? submitted ?? get().settings;
     if (get().isGenerating || get().isPreparing || get().isDirectorProcessing || get().pendingPayment) return;
-    if (!client) {
+    if (!client || get().connectionStatus === "invalid") {
       set({ showConnect: true });
       return;
     }
@@ -623,7 +632,7 @@ export const useStore = create<Store>()((set, get) => ({
     const { client } = get();
     const selectedImage = opts?.source ?? get().selectedImage;
     if (get().isDirectorProcessing || get().isGenerating || get().isPreparing) return;
-    if (!client && kind !== "pixelSnap") {
+    if ((!client || get().connectionStatus === "invalid") && kind !== "pixelSnap") {
       set({ showConnect: true });
       return;
     }
@@ -712,20 +721,9 @@ export const useStore = create<Store>()((set, get) => ({
     if (savedUI) set(savedUI);
 
     if (cfg) {
-      // Trust the stored token immediately so the app is usable on first paint, then check it in
-      // the background. A revoked or expired key otherwise shows "Connected" forever and only
-      // reveals itself as a failed generation.
-      set({ connection: cfg, client: new NaiClient(cfg), connectionStatus: "ok" });
-      void get().refreshAccount();
-      void verifyToken(cfg).then((verdict) => {
-        // Only a hard rejection revokes, and never mid-run — a background probe must not yank the
-        // client out from under a generation that is currently streaming.
-        if (verdict === "invalid" && !get().isGenerating) {
-          clearConnection();
-          set({ connection: null, client: null, connectionStatus: "invalid", showConnect: true });
-          toast.error(translateUI("Your saved token is no longer valid — please reconnect."));
-        }
-      });
+      set({ connection: cfg, client: new NaiClient(cfg), account: null, connectionStatus: "verifying", connectionError: null });
+      await Promise.all([get().refreshAccount(), get().loadGallery()]);
+      return;
     } else {
       set({ showConnect: true });
     }

@@ -1,7 +1,7 @@
 import { Host, Model, EventType, EmotionOptions, bytesToBase64, base64ToBytes, type Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
 import { parseImage, prepareDirectorReference } from "./media";
 import { NaiTransport } from "./transport";
-import { parseAccount } from "./cost";
+import { queryAccount } from "./account";
 import { buildPayload } from "./payload";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "./types";
 import { isV4Model, isV5Model, supportsStreaming, type GenerationModel } from "./models";
@@ -123,49 +123,20 @@ export function saveUIPrefs(p: UIPrefs) {
   }
 }
 
-export type TokenVerdict = "ok" | "invalid" | "unknown";
-
-/**
- * Cheap authentication probe, so the UI can stop claiming "Connected" about a token it never
- * checked. Constructing a NaiClient performs zero I/O, so without this a truncated token gets a
- * green dot and a success toast, then fails forty seconds later behind a shimmer.
- *
- * Deliberately NOT `suggestTags`: that endpoint is unauthenticated and returns real results for a
- * garbage token, so it would wave every bad key through.
- *
- * Returns "unknown" — never "invalid" — for anything that isn't a hard 401/403. A network blip or
- * a CORS failure must not lock a user out of their own client. And the probe is skipped entirely
- * for custom hosts: a proxy that forwards only the image endpoints has no reason to serve
- * api.novelai.net's account routes, so probing it would punish exactly the setup we support.
- */
-export async function verifyToken(cfg: ConnectionConfig): Promise<TokenVerdict> {
-  if (cfg.host !== Host.WEB) return "unknown";
-  try {
-    const res = await fetch(`${Host.WEB}/user/subscription`, {
-      headers: { Authorization: `Bearer ${cfg.token}` },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.status === 401 || res.status === 403) return "invalid";
-    return res.ok ? "ok" : "unknown";
-  } catch {
-    return "unknown";
-  }
-}
-
 // ---- Application-owned request layer ----
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 export type GenerateHandle = { seed: number; streaming: boolean; events: AsyncGenerator<MsgpackEvent> };
 
 export class NaiClient {
   private readonly transport: NaiTransport;
+  private readonly connection: ConnectionConfig;
   private readonly vibes = new Map<string, string>();
   private activeController?: AbortController;
-  constructor(cfg: ConnectionConfig) { this.transport = new NaiTransport({ ...cfg }); }
+  constructor(cfg: ConnectionConfig) { this.connection = { ...cfg }; this.transport = new NaiTransport(this.connection); }
   cancelGeneration() { this.activeController?.abort(); }
 
   async account() {
-    const response = await this.transport.request("/user/subscription", undefined, AbortSignal.timeout(8000), "application/json");
-    return parseAccount(await response.json());
+    return queryAccount(this.connection);
   }
   uncachedVibes(s: GenerationSettings) {
     if (s.imageSource?.mode === "infill" || isV5Model(s.model) || !isV4Model(s.model) || (s.model.includes("4-5") && s.directorReference.length)) return 0;
