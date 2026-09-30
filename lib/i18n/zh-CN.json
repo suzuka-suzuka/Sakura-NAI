@@ -401,7 +401,6 @@
   "This generation costs Anlas": "本次生成需要点数",
   "{0} steps · {1} image(s)": "{0} 步 · {1} 张图片",
   "The current batch is estimated to cost {0} points. Continue?": "本批图片预计消耗 {0} 点 Anlas，是否继续生成？",
-  "We remind you once when entering paid generation. Returning to 0 points re-enables the reminder. You can disable it in Advanced settings.": "本次切换到付费生成只提醒一次；回到 0 点后再次切换会重新提醒。可在高级设置中关闭。",
   "Confirm and generate": "确认并生成",
   "Blank canvas": "空白画布",
   "Generating final image": "等待最终图片",
