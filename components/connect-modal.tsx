@@ -147,8 +147,8 @@ export function ConnectModal({ connectionOptions }: { connectionOptions: Connect
             setEdited(true);
             if (source === "custom") setAdvanced(true);
           }}>
-            <option value="official">{translateUI("NovelAI official key")}</option>
             <option value="sakura" disabled={!connectionOptions.sakuraUrl}>{translateUI("Sakura key")}</option>
+            <option value="official">{translateUI("NovelAI official key")}</option>
             <option value="custom">{translateUI("Custom connection")}</option>
           </Select>
           <p className="mt-1.5 break-all font-[family-name:var(--font-mono)] text-[11px] text-muted">{host}</p>

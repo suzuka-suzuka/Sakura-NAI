@@ -20,7 +20,7 @@ export function connectionSource(host: string, options: ConnectionOptions): Conn
 }
 
 export function createConnectionDraft(saved: ConnectionConfig | null, options: ConnectionOptions): ConnectionDraft {
-  const source = saved ? connectionSource(saved.host, options) : "official";
+  const source = saved ? connectionSource(saved.host, options) : options.sakuraUrl ? "sakura" : "official";
   const tokens = { official: "", sakura: "", custom: "" };
   if (saved) tokens[source] = saved.token;
   return { source, tokens, customHost: source === "custom" ? saved!.host : "" };

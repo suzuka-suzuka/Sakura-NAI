@@ -35,7 +35,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。连接窗口的「密钥类型」下拉框可选择「NovelAI 官方 Key」「Sakura Key」或「自定义接口」。官方与 Sakura 选项自动设置接口地址；自定义接口的地址在「高级连接设置」中填写。切换类型时，当前表单分别保留各类型的密钥，不会把一个服务的密钥自动发给另一个服务。自定义接口应支持本项目调用的 NovelAI API 及浏览器跨域请求。
+打开 [http://localhost:3000](http://localhost:3000)。连接窗口的「密钥类型」下拉框可选择「Sakura Key」「NovelAI 官方 Key」或「自定义接口」。首次使用默认选择 Sakura Key，已保存的连接恢复原类型；Sakura 配置不可用时默认选择官方 Key。官方与 Sakura 选项自动设置接口地址；自定义接口的地址在「高级连接设置」中填写。切换类型时，当前表单分别保留各类型的密钥，不会把一个服务的密钥自动发给另一个服务。自定义接口应支持本项目调用的 NovelAI API 及浏览器跨域请求。
 
 Sakura 接口地址从项目根目录的 `connection.config.json` 读取：
 

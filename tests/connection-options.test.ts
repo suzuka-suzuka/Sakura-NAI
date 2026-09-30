@@ -66,12 +66,14 @@ test("两种类型验证账户时使用各自地址和密钥", async t => {
     return Response.json({ tier: 3, active: true, trainingStepsLeft: { fixedTrainingStepsLeft: 100, purchasedTrainingSteps: 0 } });
   });
   const draft = createConnectionDraft(null, options);
+  assert.equal(draft.source, "sakura");
+  assert.equal(createConnectionDraft(null, { sakuraUrl: null }).source, "official");
   draft.tokens.official = "official-test-key";
   draft.tokens.sakura = "sakura-test-key";
   await queryAccount(connectionFromDraft(draft, options, retry));
-  await queryAccount(connectionFromDraft({ ...draft, source: "sakura" }, options, retry));
+  await queryAccount(connectionFromDraft({ ...draft, source: "official" }, options, retry));
   assert.deepEqual(requests, [
-    { url: `${DEFAULT_CONNECTION.host}/user/subscription`, token: "Bearer official-test-key" },
     { url: "https://relay.tenshimomone.com/user/subscription", token: "Bearer sakura-test-key" },
+    { url: `${DEFAULT_CONNECTION.host}/user/subscription`, token: "Bearer official-test-key" },
   ]);
 });

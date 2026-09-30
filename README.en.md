@@ -35,7 +35,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The **Key type** dropdown offers **NovelAI official key**, **Sakura key**, and **Custom connection**. Official and Sakura choices set their host automatically; enter custom hosts under advanced connection settings. Each type keeps a separate key in the current form, so switching never reuses another service's credentials. Custom hosts must support the NovelAI endpoints used by this client and allow browser requests through CORS.
+Open [http://localhost:3000](http://localhost:3000). The **Key type** dropdown offers **Sakura key**, **NovelAI official key**, and **Custom connection**. New users start with Sakura selected; saved connections restore their original type, and unavailable Sakura configuration defaults to the official key. Official and Sakura choices set their host automatically; enter custom hosts under advanced connection settings. Each type keeps a separate key in the current form, so switching never reuses another service's credentials. Custom hosts must support the NovelAI endpoints used by this client and allow browser requests through CORS.
 
 The Sakura host is read from `connection.config.json` in the project root:
 
