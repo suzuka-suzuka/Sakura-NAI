@@ -7,10 +7,12 @@ import { toast } from "sonner";
 import { KeyRound } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { DEFAULT_CONNECTION } from "@/lib/nai/client";
+import { connectionDraftHost, connectionFromDraft, createConnectionDraft, type ConnectionOptions, type ConnectionSource } from "@/lib/connection-options";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, NumberInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { BrandLogo } from "@/components/brand-logo";
 
 /**
@@ -27,7 +29,7 @@ function hostLabel(raw: string): string {
   }
 }
 
-export function ConnectModal() {
+export function ConnectModal({ connectionOptions }: { connectionOptions: ConnectionOptions }) {
   useLocale();
   const show = useStore((s) => s.showConnect);
   const dismissible = useStore((s) => Boolean(s.client));
@@ -38,8 +40,9 @@ export function ConnectModal() {
   const connect = useStore((s) => s.connect);
   const setUI = useStore((s) => s.setUI);
 
-  const [token, setToken] = useState(existing?.token ?? "");
-  const [host, setHost] = useState(existing?.host ?? DEFAULT_CONNECTION.host);
+  const [draft, setDraft] = useState(() => createConnectionDraft(existing, connectionOptions));
+  const host = connectionDraftHost(draft, connectionOptions);
+  const token = draft.tokens[draft.source];
   const [maxRetries, setMaxRetries] = useState(existing?.maxRetries ?? DEFAULT_CONNECTION.maxRetries);
   const [baseDelay, setBaseDelay] = useState(existing?.baseDelay ?? DEFAULT_CONNECTION.baseDelay);
   const [advanced, setAdvanced] = useState(false);
@@ -65,33 +68,27 @@ export function ConnectModal() {
   if (show !== prevShow) {
     setPrevShow(show);
     if (show) {
-      setToken(existing?.token ?? "");
-      setHost(existing?.host ?? DEFAULT_CONNECTION.host);
+      const restored = createConnectionDraft(existing, connectionOptions);
+      setDraft(restored);
       setMaxRetries(existing?.maxRetries ?? DEFAULT_CONNECTION.maxRetries);
       setBaseDelay(existing?.baseDelay ?? DEFAULT_CONNECTION.baseDelay);
       setEdited(false);
-      // Expand Advanced when the saved host isn't the default, so a configured proxy is visible
-      // instead of hidden behind a collapsed toggle that looks like it holds nothing.
-      setAdvanced(Boolean(existing) && existing?.host !== DEFAULT_CONNECTION.host);
+      setAdvanced(restored.source === "custom");
     }
   }
 
   // Direct-to-NovelAI vs. a proxied host changes both the copy and where credentials travel.
-  const isDirect = (host.trim() || DEFAULT_CONNECTION.host) === DEFAULT_CONNECTION.host;
+  const isDirect = draft.source === "official";
+  const sakuraUnavailable = draft.source === "sakura" && !connectionOptions.sakuraUrl;
 
   const submit = async () => {
-    if (verifying) return;
+    if (verifying || sakuraUnavailable) return;
     if (!token.trim()) {
-      toast.error(isDirect ? translateUI("Please enter your NovelAI API token") : translateUI("Please enter your access key"));
+      toast.error(isDirect ? translateUI("Please enter your NovelAI API token") : draft.source === "sakura" ? translateUI("Please enter your Sakura key") : translateUI("Please enter your access key"));
       return;
     }
     setEdited(false);
-    const ok = await connect({
-      token: token.trim(),
-      host: host.trim() || DEFAULT_CONNECTION.host,
-      maxRetries,
-      baseDelay,
-    });
+    const ok = await connect(connectionFromDraft(draft, connectionOptions, { maxRetries, baseDelay }));
     if (!ok) return;
     toast.success(isDirect ? translateUI("Connected to NovelAI") : translateUI("Connected"));
   };
@@ -124,6 +121,8 @@ export function ConnectModal() {
           ) : isDirect ? (
             <>
               {translateUI(" Paste your NovelAI token to start. It's stored only in this browser and sent straight to NovelAI — never to us. ")}</>
+          ) : draft.source === "sakura" ? (
+            <>{translateUI("Paste your Sakura key to start. It's stored only in this browser and sent, along with your prompts, to the Sakura relay below.")}</>
           ) : (
             <>
               {translateUI(" Paste your access key to start. It's stored only in this browser and sent, along with your prompts, to the host you've configured below. ")}</>
@@ -141,7 +140,22 @@ export function ConnectModal() {
       </div>
       <div className="flex flex-col gap-4">
         <div>
-          <Label htmlFor="nai-token">{isDirect ? translateUI("NovelAI API token") : translateUI("Access key")}</Label>
+          <Label htmlFor="nai-key-type">{translateUI("Key type")}</Label>
+          <Select id="nai-key-type" value={draft.source} disabled={verifying} onChange={(e) => {
+            const source = e.target.value as ConnectionSource;
+            setDraft((previous) => ({ ...previous, source }));
+            setEdited(true);
+            if (source === "custom") setAdvanced(true);
+          }}>
+            <option value="official">{translateUI("NovelAI official key")}</option>
+            <option value="sakura" disabled={!connectionOptions.sakuraUrl}>{translateUI("Sakura key")}</option>
+            <option value="custom">{translateUI("Custom connection")}</option>
+          </Select>
+          <p className="mt-1.5 break-all font-[family-name:var(--font-mono)] text-[11px] text-muted">{host}</p>
+          {!connectionOptions.sakuraUrl && <p className="mt-1 text-[12px] text-warn">{translateUI("Sakura connection is unavailable. Please contact the site owner.")}</p>}
+        </div>
+        <div>
+          <Label htmlFor="nai-token">{isDirect ? translateUI("NovelAI API token") : draft.source === "sakura" ? translateUI("Sakura key") : translateUI("Access key")}</Label>
           <div className="relative">
             <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
             <Input
@@ -155,7 +169,8 @@ export function ConnectModal() {
               aria-invalid={rejected || undefined}
               aria-describedby={error ? "nai-token-error" : undefined}
               onChange={(e) => {
-                setToken(e.target.value);
+                const value = e.target.value;
+                setDraft((previous) => ({ ...previous, tokens: { ...previous.tokens, [previous.source]: value } }));
                 setEdited(true);
               }}
               onKeyDown={(e) => e.key === "Enter" && void submit()}
@@ -188,7 +203,11 @@ export function ConnectModal() {
           <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border-soft bg-surface-2 p-4">
             <div>
               <Label htmlFor="nai-host">{translateUI("Host URL")}</Label>
-              <Input id="nai-host" value={host} disabled={verifying} onChange={(e) => { setHost(e.target.value); setEdited(true); }} />
+              <Input id="nai-host" value={host} disabled={verifying} readOnly={draft.source !== "custom"} onChange={(e) => {
+                const customHost = e.target.value;
+                setDraft((previous) => ({ ...previous, customHost }));
+                setEdited(true);
+              }} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -217,7 +236,7 @@ export function ConnectModal() {
           </div>
         )}
 
-        <Button onClick={() => void submit()} disabled={verifying} aria-busy={verifying} className="mt-1 w-full">
+        <Button onClick={() => void submit()} disabled={verifying || sakuraUnavailable} aria-busy={verifying} className="mt-1 w-full">
           {verifying ? (
             <>
               <span

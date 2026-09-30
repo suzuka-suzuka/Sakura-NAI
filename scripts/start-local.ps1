@@ -9,6 +9,7 @@ Copy-Item -LiteralPath 'public' -Destination '.next/standalone' -Recurse -Force
 $env:HOSTNAME = '127.0.0.1'
 $env:PORT = '3000'
 $env:NODE_ENV = 'production'
+$env:SAKURA_CONFIG_FILE = Join-Path (Get-Location).Path 'connection.config.json'
 Write-Host 'Sakura NAI: http://127.0.0.1:3000 (Ctrl+C to stop)'
 node .next/standalone/server.js
 exit $LASTEXITCODE

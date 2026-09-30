@@ -18,8 +18,9 @@ import { HistoryPanel } from "./gallery/history-panel";
 import { CommandPalette } from "./command-palette";
 import { IconButton } from "./ui/icon-button";
 import { cn } from "@/lib/utils";
+import type { ConnectionOptions } from "@/lib/connection-options";
 
-export function Studio() {
+export function Studio({ connectionOptions }: { connectionOptions: ConnectionOptions }) {
   useLocale();
   const init = useStore((s) => s.init);
   const compact = useCompactLayout();
@@ -186,7 +187,7 @@ export function Studio() {
       </div>
 
       <PaymentConfirmModal />
-      <ConnectModal />
+      <ConnectModal connectionOptions={connectionOptions} />
       <DirectorModal />
       <ImageEditor />
       <Lightbox />

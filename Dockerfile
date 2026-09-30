@@ -45,6 +45,7 @@ COPY --link --from=builder --chown=65534:65534 /app/.next/standalone ./
 COPY --link --from=builder --chown=65534:65534 /app/.next/static ./.next/static
 COPY --link --from=builder --chown=65534:65534 /app/public ./public
 COPY --link --from=builder --chown=65534:65534 /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
+COPY --link --from=builder --chown=65534:65534 /app/connection.config.json ./connection.config.json
 
 USER nobody
 EXPOSE 3000

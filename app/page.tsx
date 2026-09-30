@@ -1,5 +1,8 @@
 import { Studio } from "@/components/studio";
+import { loadConnectionOptions } from "@/lib/server/connection-config";
 
-export default function Home() {
-  return <Studio />;
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  return <Studio connectionOptions={await loadConnectionOptions()} />;
 }

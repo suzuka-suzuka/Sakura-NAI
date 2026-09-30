@@ -8,7 +8,7 @@
 
 A cherry blossom themed studio for NovelAI image generation. Prompts, characters, generation settings, and a local gallery share one workspace, so every image can begin with a simple idea.
 
-Run Sakura NAI locally on Windows or host it on a Linux server. The browser calls NovelAI's official API through an application-owned request and response layer, without a NovelAI SDK. This independent, unofficial client requires your own NovelAI API token and the appropriate account access.
+Run Sakura NAI locally on Windows or host it on a Linux server. The browser calls the selected NovelAI official or Sakura relay API through an application-owned request and response layer, without a NovelAI SDK. This independent, unofficial client requires a key and account access for the selected service.
 
 ## Features
 
@@ -35,9 +35,21 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and enter your NovelAI API token in the connection dialog. For another API host, expand the advanced connection settings. Custom hosts must support the NovelAI endpoints used by this client and allow browser requests through CORS.
+Open [http://localhost:3000](http://localhost:3000). The **Key type** dropdown offers **NovelAI official key**, **Sakura key**, and **Custom connection**. Official and Sakura choices set their host automatically; enter custom hosts under advanced connection settings. Each type keeps a separate key in the current form, so switching never reuses another service's credentials. Custom hosts must support the NovelAI endpoints used by this client and allow browser requests through CORS.
 
-Both official and custom hosts are verified through `/user/subscription`, which also loads account allowances. The UI shows **Connected** only after receiving valid account data and verifies again on reload. Invalid or disabled keys prompt you to reconnect. Network errors, rate limits, service failures, or unsupported account queries show **Unverified** and keep your configuration available for retry.
+The Sakura host is read from `connection.config.json` in the project root:
+
+```json
+{
+  "sakura": {
+    "url": "https://relay.tenshimomone.com/"
+  }
+}
+```
+
+Edit `sakura.url` and refresh the page to use the new host when selecting Sakura, without rebuilding or restarting. Saved connections keep their original address; reselect Sakura and enter the matching key to switch. This file contains only a public host address, never credentials. Missing or invalid configuration disables Sakura while official and custom connections remain available. Set the runtime environment variable `SAKURA_CONFIG_FILE` to an absolute path to load a different file. The Windows launcher points to the project-root file, and Docker Compose mounts it read-only.
+
+Official, Sakura, and custom hosts are verified through `/user/subscription`, which also loads account allowances. The UI shows **Connected** only after receiving valid account data and verifies again on reload. Invalid or disabled keys prompt you to reconnect. Network errors, rate limits, service failures, or unsupported account queries show **Unverified** and keep your configuration available for retry.
 
 If only Node.js is installed, you can invoke Bun through npm to install dependencies:
 

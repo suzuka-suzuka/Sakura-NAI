@@ -8,7 +8,7 @@
 
 一个以樱花为主题的 NovelAI 绘图工作台。把提示词、角色、生成参数和本地图库放在同一页，让灵感从一句描述开始。
 
-Sakura NAI 可在 Windows 本地运行，也可部署到 Linux 服务器。浏览器直接调用 NovelAI 官方 API，项目自行构造请求、解析图片与流式响应，不依赖 NovelAI SDK。它是独立的非官方客户端，需要你自己的 NovelAI API Token 和相应的账户权限。
+Sakura NAI 可在 Windows 本地运行，也可部署到 Linux 服务器。浏览器直接调用所选的 NovelAI 官方或 Sakura 中转 API，项目自行构造请求、解析图片与流式响应，不依赖 NovelAI SDK。它是独立的非官方客户端，需要对应服务的密钥和账户权限。
 
 ## 能做什么
 
@@ -35,9 +35,21 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。首次连接时输入你的 NovelAI API Token。需要自定义接口地址时，在连接窗口展开「高级连接设置」；自定义接口应支持本项目调用的 NovelAI API 及浏览器跨域请求。
+打开 [http://localhost:3000](http://localhost:3000)。连接窗口的「密钥类型」下拉框可选择「NovelAI 官方 Key」「Sakura Key」或「自定义接口」。官方与 Sakura 选项自动设置接口地址；自定义接口的地址在「高级连接设置」中填写。切换类型时，当前表单分别保留各类型的密钥，不会把一个服务的密钥自动发给另一个服务。自定义接口应支持本项目调用的 NovelAI API 及浏览器跨域请求。
 
-官方与自定义地址都会通过 `/user/subscription` 验证密钥并加载额度，收到有效账户信息后才显示「已连接」。刷新页面会重新验证；无效或停用的密钥提示重新连接。网络错误、限流、服务异常或不支持账户查询时显示「未验证」，保留连接配置供重试，不会误报连接成功。
+Sakura 接口地址从项目根目录的 `connection.config.json` 读取：
+
+```json
+{
+  "sakura": {
+    "url": "https://relay.tenshimomone.com/"
+  }
+}
+```
+
+只修改 `sakura.url` 即可更换地址，刷新网页后新选择的 Sakura 连接使用新地址，无需重新构建或重启。已保存的连接保留原地址；需要切换时重新选择 Sakura 并填写对应密钥。此文件只配置公开接口地址，不填写密钥；文件缺失或无效时禁用 Sakura 选项，官方和自定义连接仍可使用。需要把文件放在其他位置时，可通过运行时环境变量 `SAKURA_CONFIG_FILE` 指定配置文件的绝对路径。Windows 启动脚本自动指向项目根目录，Docker Compose 以只读方式挂载该文件。
+
+官方、Sakura 与自定义地址都会通过 `/user/subscription` 验证密钥并加载额度，收到有效账户信息后才显示「已连接」。刷新页面会重新验证；无效或停用的密钥提示重新连接。网络错误、限流、服务异常或不支持账户查询时显示「未验证」，保留连接配置供重试，不会误报连接成功。
 
 如果电脑只有 Node.js，也可以临时通过 npm 调用 Bun 安装依赖：
 

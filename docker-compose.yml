@@ -8,6 +8,8 @@ services:
       SITE_URL: ${SITE_URL:-}
     ports:
       - "8080:3000"
+    volumes:
+      - ./connection.config.json:/app/connection.config.json:ro
     restart: unless-stopped
     stop_grace_period: 10s
     networks:
