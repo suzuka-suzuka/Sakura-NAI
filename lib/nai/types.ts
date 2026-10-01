@@ -23,6 +23,8 @@ export type ImageSource = {
   strength: number;
   noise: number;
   inpaintStrength: number;
+  /** V5 Enhance Max: source-size request, expanded output and billing canvas. */
+  upscaledEnhance?: boolean;
 };
 
 export type ReferenceImage = {

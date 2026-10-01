@@ -12,6 +12,7 @@ import { buildPayload } from "../lib/nai/payload";
 import { fitPreviewGrid } from "../lib/preview-layout";
 import type { GalleryImage } from "../lib/db/gallery";
 import { characterKind } from "../lib/nai/characters";
+import { activeGenerationSettings, imageToolOutputSize } from "../lib/nai/image-tools";
 
 const opus: AccountInfo = { tier: 3, active: true, anlas: 1000, usage: { percent: 30, isNegative: false } };
 const cfg = { host: "https://example.invalid", token: "not-a-real-token", maxRetries: 0, baseDelay: 0 };
@@ -56,6 +57,70 @@ test("image-tool generation submits its snapshot without replacing the active dr
   assert.equal(generate.mock.calls[0].arguments[0].prompt,"selected image prompt");
   assert.equal(useStore.getState().settings.prompt,"unfinished draft");
   assert.equal(useStore.getState().images[0].settings.imageSource?.strength,0.5);
+});
+
+test("sidebar enhancement submission uses edits made while the panel is open", async t => {
+  const { generate } = setup(t,{prompt:"draft before enhancing"});
+  useStore.getState().beginEnhancement(oldImage);
+  useStore.getState().patchEnhancement({factor:1,magnitude:1});
+  useStore.getState().patchSettings({prompt:"new sidebar prompt",negativePrompt:"new negative",steps:22,scale:6.5,cfgRescale:0.25});
+  const before=useStore.getState().settings;
+  const quote=activeGenerationSettings(before,useStore.getState().enhancement);
+  assert.equal(estimateCost(quote,opus).total,0);
+  await useStore.getState().generate();
+  assert.equal(generate.mock.calls.length,1);
+  const submitted=generate.mock.calls[0].arguments[0];
+  assert.deepEqual(submitted,quote);
+  assert.match(submitted.prompt,/^new sidebar prompt/); assert.equal(submitted.steps,22); assert.equal(submitted.scale,6.5);
+  assert.equal(submitted.imageSource?.dataUrl,oldImage.dataUrl); assert.equal(submitted.imageSource?.strength,0.2);
+  assert.deepEqual(useStore.getState().settings,before); assert.equal(useStore.getState().enhancement,null);
+});
+
+test("Max enhancement's paid confirmation freezes its quote and saves the expanded output dimensions", async t => {
+  const { generate } = setup(t,{prompt:"confirmed prompt",steps:23});
+  useStore.getState().beginEnhancement(oldImage);
+  useStore.getState().patchEnhancement({factor:"max",magnitude:1});
+  const quote=activeGenerationSettings(useStore.getState().settings,useStore.getState().enhancement);
+  await useStore.getState().generate();
+  assert.equal(generate.mock.calls.length,0);
+  assert.equal(useStore.getState().pendingPayment?.cost,16);
+  assert.deepEqual(useStore.getState().pendingPayment?.settings,quote);
+  useStore.getState().patchSettings({prompt:"changed after confirmation opened",steps:50});
+  useStore.getState().patchEnhancement({magnitude:5});
+  await useStore.getState().confirmPayment();
+  assert.equal(generate.mock.calls.length,1);
+  assert.deepEqual(generate.mock.calls[0].arguments[0],quote);
+  const saved=useStore.getState().images[0].settings;
+  assert.deepEqual({width:saved.width,height:saved.height},imageToolOutputSize(quote));
+  assert.equal(saved.imageSource,null);
+  assert.equal(useStore.getState().settings.prompt,"changed after confirmation opened");
+});
+
+test("advanced visibility preserves custom strength/noise and closing enhancement preserves the sidebar draft", () => {
+  useStore.setState({settings:settings({prompt:"untouched draft"})});
+  const before=useStore.getState().settings;
+  useStore.getState().beginEnhancement(oldImage);
+  useStore.getState().patchEnhancement({advanced:true,strength:0.33,noise:0.12});
+  useStore.getState().patchEnhancement({advanced:false});
+  assert.equal(useStore.getState().enhancement?.strength,0.33);
+  assert.equal(useStore.getState().enhancement?.noise,0.12);
+  useStore.getState().patchEnhancement({advanced:true});
+  assert.equal(useStore.getState().enhancement?.strength,0.33);
+  useStore.getState().patchEnhancement({magnitude:5});
+  assert.equal(useStore.getState().enhancement?.strength,0.7); assert.equal(useStore.getState().enhancement?.noise,0.1);
+  useStore.getState().closeEnhancement();
+  assert.equal(useStore.getState().enhancement,null); assert.deepEqual(useStore.getState().settings,before);
+});
+
+test("paid reminder follows enhancement's effective cost when switching between paid and free factors", () => {
+  useStore.setState({settings:settings(),account:opus});
+  useStore.getState().beginEnhancement(oldImage);
+  useStore.setState({paidAcknowledged:true});
+  assert.equal(useStore.getState().paidAcknowledged,true);
+  useStore.getState().patchEnhancement({factor:1});
+  assert.equal(useStore.getState().paidAcknowledged,false);
+  useStore.getState().patchEnhancement({factor:"max"});
+  assert.equal(useStore.getState().paidAcknowledged,false);
 });
 
 test("reordering characters preserves names, both prompts and coordinates", () => {

@@ -18,7 +18,7 @@ Run Sakura NAI locally on Windows or host it on a Linux server. The browser call
 - **Direct parameter editing:** steps, guidance, seed, sampler, dimensions, batch size, random seed, and a reset action.
 - **Optional streaming:** the preview follows the image aspect ratio. With streaming disabled, the previous image stays visible until completion; the first generation waits on a blank canvas.
 - **Anlas display:** costs appear on the generation button and relevant image tools. An optional confirmation appears when switching from free to paid generation. Calculations use account status; API-side billing is authoritative.
-- **Image workflows:** image-to-image, inpainting, enhancement, variations, 2× upscaling, and image tools. Reference and Vibe Transfer support depends on the model; V5 currently does not support Vibe or precise references.
+- **Image workflows:** image-to-image, inpainting, enhancement, variations, 2× upscaling, and image tools. Enhance offers five magnitude levels, advanced strength/noise controls, and V5 Max; sidebar settings remain editable and pricing follows the effective enhancement request. Reference and Vibe Transfer support depends on the model; V5 currently does not support Vibe or precise references.
 - **Local gallery:** a single-column history, fullscreen previews, PNG downloads, ZIP export, and undo for deletion. Selecting an image previews it; reusing its parameters is a separate action. Import parameters from NovelAI PNGs.
 - **Sakura identity:** a five-petal blossom, pink light mode, warm plum dark mode, Chinese/English UI, and alternate accent colors. Persistent desktop controls and mobile drawers.
 

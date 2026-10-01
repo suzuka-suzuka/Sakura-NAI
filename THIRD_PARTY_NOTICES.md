@@ -13,9 +13,13 @@ does not imply that the original authors maintain or endorse this fork.
 
 ## Aaalice_NAI_Launcher
 
-The modern Anlas pricing logic in lib/nai/cost.ts is adapted from Aaalice_NAI_Launcher (MIT), including the V5 1.5 multiplier, rounding order, first-sample Opus discount, allowance status, subscription validity, and reference surcharges.
+The modern Anlas pricing logic in lib/nai/cost.ts is adapted from Aaalice_NAI_Launcher (MIT), including the V5 1.5 multiplier, rounding order, first-sample Opus discount, allowance status, subscription validity, reference surcharges, and the expanded billing canvas for Enhance Max. The enhancement levels and size handling in lib/nai/image-tools.ts also refer to that project's official-client compatibility constants and tests.
 
 Source: https://github.com/Aaalice233/Aaalice_NAI_Launcher/blob/main/lib/core/services/anlas_calculator.dart
+
+Enhancement constants: https://github.com/Aaalice233/Aaalice_NAI_Launcher/blob/main/lib/core/constants/api_constants.dart
+
+Enhancement billing: https://github.com/Aaalice233/Aaalice_NAI_Launcher/blob/main/lib/presentation/providers/cost_estimate_provider.dart
 
 MIT License
 

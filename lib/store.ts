@@ -23,6 +23,7 @@ import {
 import { DEFAULT_SETTINGS, type GenerationSettings, type ReferenceImage, type CharacterSetting } from "@/lib/nai/types";
 import { supportsStreaming, isV5Model, maxSamples } from "@/lib/nai/models";
 import { CHARACTER_STARTERS, type CharacterKind } from "@/lib/nai/characters";
+import { activeGenerationSettings, enhanceFactors, ENHANCE_LEVELS, imageToolOutputSize, type Enhancement } from "@/lib/nai/image-tools";
 import type { EmotionOptions, Image } from "@/lib/nai/protocol";
 import {
   loadImages,
@@ -78,6 +79,10 @@ type Store = {
   patchSettings: (patch: Partial<GenerationSettings>) => void;
   resetSettings: () => void;
   restoreSettings: (s: GenerationSettings, options?: RestoreSettingsOptions) => void;
+  enhancement: Enhancement | null;
+  beginEnhancement: (source: GalleryImage) => void;
+  patchEnhancement: (patch: Partial<Omit<Enhancement, "source">>) => void;
+  closeEnhancement: () => void;
   addCharacter: (kind?: CharacterKind) => void;
   updateCharacter: (i: number, patch: Partial<CharacterSetting>) => void;
   removeCharacter: (i: number) => void;
@@ -181,6 +186,18 @@ export const useStore = create<Store>()((set, get) => ({
 
   // ---- settings ----
   settings: DEFAULT_SETTINGS,
+  enhancement: null,
+  beginEnhancement: (source) => {
+    const factors = enhanceFactors(source, get().settings.model);
+    set({ enhancement: { source: structuredClone(source), factor: factors[factors.length - 1], magnitude: 3, ...ENHANCE_LEVELS[2], advanced: false }, lastError: null });
+  },
+  patchEnhancement: (patch) => set(s => {
+    if (!s.enhancement) return {};
+    const magnitude = Math.min(5, Math.max(1, Math.round(patch.magnitude ?? s.enhancement.magnitude)));
+    return { enhancement: { ...s.enhancement, ...patch, magnitude,
+      ...(patch.magnitude !== undefined ? ENHANCE_LEVELS[magnitude - 1] : {}) } };
+  }),
+  closeEnhancement: () => set({ enhancement: null }),
   patchSettings: (patch) => set((s) => {
     const settings = { ...s.settings, ...patch };
     if (isV5Model(settings.model)) {
@@ -279,7 +296,7 @@ export const useStore = create<Store>()((set, get) => ({
     const { images } = get();
     const batch = images.filter((i) => i.batchId === batchId).sort((a, b) => a.batchIndex - b.batchIndex);
     if (batch.length) {
-      set({ selectedBatch: batch, selectedImage: batch[0], focusedIndex: null });
+      set({ selectedBatch: batch, selectedImage: batch[0], focusedIndex: null, enhancement: null });
       if (loadRecipe) {
         get().restoreSettings(batch[0].settings, {
           message: translateUI("Recipe loaded from gallery — seed {0}", batch[0].seed),
@@ -289,7 +306,7 @@ export const useStore = create<Store>()((set, get) => ({
     }
   },
   selectImage: (img, loadRecipe = false) => {
-    set({ selectedImage: img });
+    set({ selectedImage: img, enhancement: null });
     if (loadRecipe) {
       get().restoreSettings(img.settings, {
         message: translateUI("Recipe loaded from gallery — seed {0}", img.seed),
@@ -308,7 +325,7 @@ export const useStore = create<Store>()((set, get) => ({
     const prevSelected = get().selectedImage;
 
     const images = prevImages.filter((i) => i.id !== id);
-    set({ images });
+    set({ images, ...(get().enhancement?.source.dataUrl === doomed.dataUrl ? { enhancement: null } : {}) });
     if (prevBatch) {
       const batch = prevBatch.filter((i) => i.id !== id);
       if (batch.length) {
@@ -370,7 +387,7 @@ export const useStore = create<Store>()((set, get) => ({
     const n = get().images.length;
     try {
       await clearImages();
-      set({ images: [], selectedBatch: null, selectedImage: null });
+      set({ images: [], selectedBatch: null, selectedImage: null, enhancement: null });
       toast.success(translateUI("Deleted {0} image{1}", n, n === 1 ? "" : "s"));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -445,7 +462,7 @@ export const useStore = create<Store>()((set, get) => ({
   clearError: () => set({ lastError: null }),
   generate: async (approved, submitted) => {
     const { client } = get();
-    const settings = approved?.settings ?? submitted ?? get().settings;
+    const settings = structuredClone(approved?.settings ?? submitted ?? activeGenerationSettings(get().settings, get().enhancement));
     if (get().isGenerating || get().isPreparing || get().isDirectorProcessing || get().pendingPayment) return;
     if (!client || get().connectionStatus === "invalid") {
       set({ showConnect: true });
@@ -489,6 +506,7 @@ export const useStore = create<Store>()((set, get) => ({
     // instead of dumping them on the first-run empty state.
     set({
       isGenerating: true,
+      enhancement: null,
       runSettings: structuredClone(settings),
       runPreview: preview,
       lastError: null,
@@ -526,7 +544,8 @@ export const useStore = create<Store>()((set, get) => ({
             timestamp: new Date().toISOString(),
             filename: `sakura_${batchId}_${i + 1}.png`,
             seed: (baseSeed + f.sampleIndex) >>> 0,
-            settings: { ...settings, seed: (baseSeed + f.sampleIndex) >>> 0 },
+            settings: { ...settings, ...imageToolOutputSize(settings), seed: (baseSeed + f.sampleIndex) >>> 0,
+              imageSource: settings.imageSource?.upscaledEnhance ? null : settings.imageSource },
             batchId,
             batchIndex: i,
             batchSize: ordered.length,
@@ -759,7 +778,9 @@ if (typeof window !== "undefined") {
 // One acknowledgement per paid episode. Any return to a known 0-point setup re-arms it,
 // whether caused by a form edit, recipe restore, or refreshed account allowance.
 useStore.subscribe((s) => {
-  if (s.paidAcknowledged && estimateCost(s.settings, s.account, s.client?.uncachedVibes(s.settings) ?? s.settings.vibe.length).total === 0) {
+  if (!s.paidAcknowledged) return;
+  const settings = activeGenerationSettings(s.settings, s.enhancement);
+  if (estimateCost(settings, s.account, s.client?.uncachedVibes(settings) ?? settings.vibe.length).total === 0) {
     useStore.setState({ paidAcknowledged: false });
   }
 });

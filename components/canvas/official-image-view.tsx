@@ -13,6 +13,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { NumericSlider } from "@/components/sidebar/official-composer";
+import { EnhancePanel } from "./enhance-panel";
 
 function PricedTool({ label, price, children, onClick, disabled }: { label: string; price: number | null; children: React.ReactNode; onClick: () => void; disabled: boolean }) {
   return <button type="button" aria-label={`${label} · ${price === null ? "—" : t("{0} points", price)}`} title={label} onClick={onClick} disabled={disabled}
@@ -29,21 +30,20 @@ export function OfficialImageView({ batch, selected }: { batch: GalleryImage[]; 
   const client = useStore(s => s.client);
   const [upscale, setUpscale] = useState(false);
   const upscalePrice = upscaleCost(img.settings.width, img.settings.height);
-  const [enhance, setEnhance] = useState<"enhance" | "variations" | null>(null), [recipe, setRecipe] = useState(false), [strength, setStrength] = useState(0.5), [noise, setNoise] = useState(0), [factor, setFactor] = useState(1);
+  const beginEnhancement = useStore(s => s.beginEnhancement), closeEnhancement = useStore(s => s.closeEnhancement);
+  const [variations, setVariations] = useState(false), [recipe, setRecipe] = useState(false), [strength, setStrength] = useState(0.5), [noise, setNoise] = useState(0);
   const [pinned, setPinned] = useState<GalleryImage | null>(null);
-  const effective = imageToolSettings(img, enhance ?? "enhance", { factor, strength, noise });
+  const effective = imageToolSettings(img, "variations", { strength, noise });
   const { width, height } = effective;
   const cost = estimateCost(effective, account, client?.uncachedVibes(effective) ?? effective.vibe.length);
-  const variationSettings = imageToolSettings(img, "variations", { strength, noise });
-  const variationCost = estimateCost(variationSettings, account, client?.uncachedVibes(variationSettings) ?? variationSettings.vibe.length);
-  const asInput = () => { patch({ ...generationSize(img.settings.width,img.settings.height),imageSource:{ dataUrl:img.dataUrl,width:img.settings.width,height:img.settings.height,mode:"img2img",strength:0.7,noise:0,inpaintStrength:1 } }); setUI({settingsCollapsed:false}); };
-  const edit = (mode: "draw" | "mask") => { patch(generationSize(img.settings.width,img.settings.height)); setUI({imageEditor:{mode,source:img.dataUrl}}); };
+  const asInput = () => { closeEnhancement(); patch({ ...generationSize(img.settings.width,img.settings.height),imageSource:{ dataUrl:img.dataUrl,width:img.settings.width,height:img.settings.height,mode:"img2img",strength:0.7,noise:0,inpaintStrength:1 } }); setUI({settingsCollapsed:false}); };
+  const edit = (mode: "draw" | "mask") => { closeEnhancement(); patch(generationSize(img.settings.width,img.settings.height)); setUI({imageEditor:{mode,source:img.dataUrl}}); };
   return <div className="flex h-full flex-col">
     <div className="flex shrink-0 flex-wrap justify-center px-3 py-3">
       <div className="flex flex-wrap items-center justify-center rounded border border-border-soft bg-surface px-1">
-        <IconButton label={t("Enhance")} onClick={()=>{setEnhance("enhance");setFactor(1);}} disabled={busy}><Sparkles /></IconButton>
-        <PricedTool label={t("Variations")} price={variationCost.valid ? variationCost.total : null} onClick={()=>{setEnhance("variations");setFactor(1);}} disabled={busy || !variationCost.valid}><Images /></PricedTool>
-        <PricedTool label={t("Upscale 2×")} price={upscalePrice} onClick={()=>setUpscale(true)} disabled={busy || upscalePrice === null}><Scan /></PricedTool>
+        <IconButton label={t("Enhance")} onClick={()=>beginEnhancement(img)} disabled={busy}><Sparkles /></IconButton>
+        <PricedTool label={t("Variations")} price={cost.valid ? cost.total : null} onClick={()=>{closeEnhancement();setVariations(true);}} disabled={busy || !cost.valid}><Images /></PricedTool>
+        <PricedTool label={t("Upscale 2×")} price={upscalePrice} onClick={()=>{closeEnhancement();setUpscale(true);}} disabled={busy || upscalePrice === null}><Scan /></PricedTool>
         <span className="mx-1 h-6 border-l border-border" />
         <IconButton label={t("Use as base image")} onClick={asInput}><ImagePlus /></IconButton>
         <IconButton label={t("Edit image")} onClick={()=>edit("draw")}><Pencil /></IconButton>
@@ -51,12 +51,13 @@ export function OfficialImageView({ batch, selected }: { batch: GalleryImage[]; 
         <IconButton label={t("Director tools")} onClick={()=>setUI({showDirector:true})}><Wand2 /></IconButton>
       </div>
     </div>
-    <div className="flex min-h-0 flex-1 items-center justify-center gap-3 overflow-hidden px-4 pb-3">
+    <div className="relative flex min-h-0 flex-1 items-center justify-center gap-3 overflow-hidden px-4 pb-3">
       {pinned && pinned.id !== img.id && <div className="relative flex h-full min-w-0 flex-1 items-center justify-center"><img src={pinned.dataUrl} alt={t("Pinned image")} className="max-h-full max-w-full object-contain"/><IconButton className="absolute right-1 top-1" label={t("Unpin image")} onClick={()=>setPinned(null)}><PinOff /></IconButton></div>}
       <div className="relative flex h-full min-w-0 flex-1 items-center justify-center">
         <img src={img.dataUrl} alt={img.settings.prompt || t("Generated image")} onClick={()=>setUI({focusedIndex:Math.max(0,batch.findIndex(i=>i.id===img.id))})} className="max-h-full max-w-full cursor-zoom-in rounded object-contain" />
         <IconButton variant="overlay" label={t("Open fullscreen preview")} className="absolute right-1 top-1" onClick={()=>setUI({focusedIndex:Math.max(0,batch.findIndex(i=>i.id===img.id))})}><Maximize2 /></IconButton>
       </div>
+      <EnhancePanel />
     </div>
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-3 pb-3">
       <div className="flex items-center gap-1 rounded border border-border-soft bg-surface p-1 text-xs">
@@ -72,13 +73,12 @@ export function OfficialImageView({ batch, selected }: { batch: GalleryImage[]; 
         <IconButton size="sm" label={t("Delete")} onClick={()=>img.id && void useStore.getState().deleteImage(img.id)}><Trash2 /></IconButton>
       </div>
     </div>
-    <Modal open={!!enhance} onClose={()=>setEnhance(null)} title={t(enhance === "variations" ? "Variations" : "Enhance image")} className="max-w-xl">
+    <Modal open={variations} onClose={()=>setVariations(false)} title={t("Variations")} className="max-w-xl">
       <div className="space-y-4">
-        {enhance === "enhance" && <div className="flex items-center gap-2 text-sm"><span className="mr-2">{t("Upscale amount")}</span>{[1,1.5,2].map(f=><Button key={f} size="sm" variant={factor===f?"default":"secondary"} disabled={img.settings.width*img.settings.height*f*f>3145728 || img.settings.width*f>2048 || img.settings.height*f>2048} onClick={()=>setFactor(f)}>{f}×</Button>)}</div>}
         <NumericSlider label={t("Strength")} min={0.01} max={1} step={0.01} value={strength} onChange={setStrength}/>
         <NumericSlider label={t("Noise")} min={0} max={1} step={0.01} value={noise} onChange={setNoise}/>
         <p className="text-xs text-muted">{width} × {height} · {effective.steps} {t("Steps")} · {effective.nSamples} {t("Images")}</p>
-        <Button className="w-full" disabled={busy || !cost.valid} onClick={()=>{setEnhance(null);void generate(undefined,effective);}}>{t(enhance === "variations" ? "Generate variations" : "Enhance")} · {cost.total} {t("points")}</Button>
+        <Button className="w-full" disabled={busy || !cost.valid} onClick={()=>{setVariations(false);void generate(undefined,effective);}}>{t("Generate variations")} · {cost.total} {t("points")}</Button>
       </div>
     </Modal>
     <Modal open={upscale} onClose={()=>setUpscale(false)} title={t("Upscale 2×")} className="max-w-sm">

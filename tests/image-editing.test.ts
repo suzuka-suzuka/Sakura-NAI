@@ -8,9 +8,61 @@ import { floodFill, opaqueMask } from "../lib/canvas-tools";
 import { saveSettings, NaiClient } from "../lib/nai/client";
 import { generationSize } from "../lib/nai/models";
 import { quantizePalette } from "../lib/pixel-snap";
-import { imageToolSettings } from "../lib/nai/image-tools";
+import { imageToolSettings, activeGenerationSettings, enhanceFactors, enhancePrompt, imageToolOutputSize, ENHANCE_LEVELS, type Enhancement } from "../lib/nai/image-tools";
 
 const source: ImageSource = { dataUrl:"data:image/png;base64,c291cmNl", width:832, height:1216, mode:"img2img", strength:0.7, noise:0, inpaintStrength:1 };
+test("enhancement follows the current sidebar recipe and keeps its own source, size, batch and seed", () => {
+  const selected = { dataUrl: source.dataUrl, settings: { ...DEFAULT_SETTINGS, prompt: "old prompt", steps: 28, seed: 17 } };
+  const current = { ...DEFAULT_SETTINGS, model: Model.V4_5, prompt: "edited prompt", negativePrompt: "edited negative", steps: 23, scale: 7, cfgRescale: 0.4, sampler: "k_dpmpp_2m" as typeof DEFAULT_SETTINGS.sampler, nSamples: 3, seed: 123,
+    characters: [{ prompt: "girl, red coat", uc: "blue", center: { x: 0.2, y: 0.7 }, enabled: true }],
+    directorReference: [{ base64: "reference", preview: "", strength: 0.7, informationExtracted: 1 }], imageSource: { ...source, mode: "infill" as const, mask: "dormant mask" } };
+  const enhancement: Enhancement = { source: selected, factor: 1.5, magnitude: 1, ...ENHANCE_LEVELS[0], advanced: false };
+  const s = activeGenerationSettings(current, enhancement), p = buildPayload(s, 42);
+  assert.equal(s.model, Model.V4_5); assert.match(s.prompt, /^edited prompt/);
+  assert.equal(s.negativePrompt, current.negativePrompt); assert.equal(s.steps, 23); assert.equal(s.scale, 7); assert.equal(s.cfgRescale, 0.4);
+  assert.equal(s.sampler, current.sampler); assert.deepEqual(s.characters, current.characters); assert.deepEqual(s.directorReference, current.directorReference);
+  assert.equal(p.action, "img2img"); assert.equal(p.parameters.mask, undefined); assert.equal(p.parameters.image, "c291cmNl");
+  assert.equal(p.parameters.strength, 0.2); assert.equal(p.parameters.noise, 0); assert.equal(s.nSamples, 1); assert.equal(s.seed, -1);
+  assert.deepEqual([s.width, s.height], [1280, 1856]);
+  assert.equal(current.prompt, "edited prompt"); assert.equal(selected.settings.prompt, "old prompt");
+  assert.equal(activeGenerationSettings(current, null), current);
+});
+test("official magnitude values, ordinary enhancement and Max use their actual billed canvas", () => {
+  assert.deepEqual(ENHANCE_LEVELS.map(s => [s.strength, s.noise]), [[0.2,0],[0.4,0],[0.5,0],[0.6,0],[0.7,0.1]]);
+  const selected = { dataUrl: source.dataUrl, settings: DEFAULT_SETTINGS };
+  const opus = { tier: 3, active: true, anlas: 1000, usage: { percent: 50, isNegative: false } };
+  const prices = [1, 1.5, "max"].map(factor => {
+    const s = imageToolSettings(selected, "enhance", { factor: factor as 1 | 1.5 | "max", strength: 0.2 });
+    return [estimateCost(s, null).total, estimateCost(s, opus).total];
+  });
+  assert.deepEqual(prices, [[6,0],[14,14],[18,18]]);
+  const s = imageToolSettings(selected, "enhance", { factor: "max", strength: 0.2 });
+  assert.deepEqual([s.width,s.height],[832,1216]);
+  assert.deepEqual(imageToolOutputSize(s), { width: 1467, height: 2144 });
+  assert.equal(buildPayload(s,42).parameters.upscaled_enhance, true);
+  assert.equal(s.prompt, DEFAULT_SETTINGS.prompt);
+  assert.equal(estimateCost({...s,steps:23},opus).total,16);
+  assert.equal(estimateCost({...s,steps:50,imageSource:{...s.imageSource!,strength:0.99}},opus).valid,false);
+  const normal = imageToolSettings(selected,"enhance",{factor:1});
+  assert.equal(buildPayload(normal,42).parameters.upscaled_enhance,undefined);
+  assert.equal(estimateCost(normal,{...opus,usage:{percent:0,isNegative:true}}).total,15);
+  assert.throws(()=>buildPayload({...s,model:Model.V4_5},42),/Max enhancement/);
+});
+test("Max tracks the active model and unavailable scale selections fall back before pricing or submission", () => {
+  const selected = { dataUrl: source.dataUrl, settings: DEFAULT_SETTINGS };
+  assert.deepEqual(enhanceFactors(selected,DEFAULT_SETTINGS.model),[1,1.5,"max"]);
+  assert.deepEqual(enhanceFactors(selected,Model.V4_5),[1,1.5]);
+  const e: Enhancement = { source:selected,factor:"max",magnitude:3,...ENHANCE_LEVELS[2],advanced:false };
+  const legacy = activeGenerationSettings({...DEFAULT_SETTINGS,model:Model.V4_5},e);
+  assert.equal(legacy.imageSource?.upscaledEnhance,undefined); assert.deepEqual([legacy.width,legacy.height],[1280,1856]);
+  assert.deepEqual(enhanceFactors({...selected,settings:{...DEFAULT_SETTINGS,width:1600,height:1600}},DEFAULT_SETTINGS.model),[1]);
+  assert.deepEqual(enhanceFactors({...selected,settings:{...DEFAULT_SETTINGS,width:768,height:1024}},DEFAULT_SETTINGS.model),[1,1.5,2,"max"]);
+});
+test("enhancement tags stay outside manual rendered text and are not duplicated", () => {
+  assert.equal(enhancePrompt("cat, text: Hello"),"cat, -2::upscaled, blurry::,, text: Hello");
+  assert.equal(enhancePrompt("cat, text:: Hello"),"cat, text:: Hello, -2::upscaled, blurry::,");
+  const prompt=enhancePrompt("cat"); assert.equal(enhancePrompt(prompt),prompt);
+});
 test("image toolbar prices and submitted variations use the selected image and the same parameters", () => {
   const selected = { dataUrl: source.dataUrl, settings: { ...DEFAULT_SETTINGS, prompt: "selected prompt", seed: 19 } };
   const variants = imageToolSettings(selected, "variations", { factor: 2, strength: 0.51, noise: 0.2 });

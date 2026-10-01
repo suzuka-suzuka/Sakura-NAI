@@ -1,6 +1,7 @@
 import { isV4Model, isV5Model } from "./models";
 import { Model } from "./protocol";
 import type { GenerationSettings } from "./types";
+import { imageToolOutputSize } from "./image-tools";
 
 export type AccountInfo = { tier: number; active: boolean; expiresAt?: number; accountType?: number; anlas: number | null; usage: { percent: number; isNegative: boolean } | null };
 export function parseAccount(value: unknown): AccountInfo {
@@ -43,8 +44,9 @@ export function estimateCost(s: GenerationSettings, account: AccountInfo | null,
     (account.expiresAt !== undefined ? account.expiresAt > Date.now() / 1000 : account.active));
   const opus = active && account?.tier === 3;
   const allowance = !v5 || !!(account?.usage && !account.usage.isNegative);
-  const free = opus && allowance && s.width * s.height <= 1048576 && s.steps <= 28;
-  const area = s.width * s.height;
+  const billed = imageToolOutputSize(s);
+  const area = billed.width * billed.height;
+  const free = opus && allowance && area <= 1048576 && s.steps <= 28;
   const smea = !s.imageSource && !v5 && !isV4Model(s.model) && s.autoSmea;
   const strength = s.imageSource ? s.imageSource.mode === "infill" ? s.imageSource.inpaintStrength : s.imageSource.strength : 1;
   const perImage = Math.max(2, Math.ceil(Math.ceil(2.951823174884865e-6 * area + 5.753298233447344e-7 * area * s.steps) * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));

@@ -1,5 +1,6 @@
 import type { GenerationPayload } from "./protocol";
 import type { GenerationSettings } from "./types";
+import { isV5Model } from "./models";
 
 const imageBytes = (url: string) => url.replace(/^data:image\/[^;]+;base64,/, "");
 
@@ -11,6 +12,10 @@ export function applyImageInput(payload: GenerationPayload, s: GenerationSetting
     !Number.isFinite(image.noise) || image.noise < 0 || image.noise > 1)
     throw new Error("Invalid image strength or noise");
   const p = payload.parameters;
+  if (image.upscaledEnhance) {
+    if (image.mode !== "img2img" || !isV5Model(s.model)) throw new Error("Max enhancement requires V5 Image2Image");
+    p.upscaled_enhance = true;
+  }
   payload.action = image.mode;
   Object.assign(p, { image: imageBytes(image.dataUrl), strength: image.strength, noise: image.noise,
     extra_noise_seed: (seed - 1) >>> 0, add_original_image: image.mode !== "infill", color_correct: false });

@@ -547,5 +547,10 @@
   "Use the seed of the displayed image": "使用当前图片的种子",
   "Main prompt type": "主提示词类型",
   "Combine prompt fields": "合并正负提示词输入框",
-  "Separate prompt fields": "拆分正负提示词输入框"
+  "Separate prompt fields": "拆分正负提示词输入框",
+  "Magnitude": "幅度",
+  "Show Advanced": "显示高级设置",
+  "Hide Advanced": "隐藏高级设置",
+  "Close enhance": "关闭增强",
+  "Max": "最大"
 }

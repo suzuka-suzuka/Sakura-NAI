@@ -1,5 +1,16 @@
 # 官网绘图工作区核对（2026-09-29）
 
+## 增强侧栏与高级设置（2026-10-01）
+
+控制电脑技能读取 Edge 时因无法可靠判断浏览器当前网址而结束，本次未继续操作该窗口。改用官网 `926954f-production` 的公开前端资源及 [Enhance 文档](https://docs.novelai.net/en/image/enhance/) 核对；没有提交官网生成请求。
+
+- 官网增强从当前侧栏读取模型、正负提示词、角色、参考与采样参数，图片提供底图和源尺寸；强制一张、随机种子，倍率决定目标画布。
+- 非模态增强面板保留侧栏编辑和左栏增强按钮。普通模式提供 1–5 档幅度，高级模式独立设置强度 0.01–0.99、噪声 0–0.99。显示／隐藏不清空自定义值。
+- V5 Max 发送 `upscaled_enhance:true`，采用等比扩至约 3 MP 的目标面积计费。档位表和费用同时参照 Aaalice_NAI_Launcher 当前 `api_constants.dart`、`anlas_calculator.dart`、`cost_estimate_provider.dart`；请求配置、报价及付费确认使用相同参数快照。
+- 普通倍率先按当前应用的生成画布上限及 64 像素网格适配。切换模型后不可用的 Max 自动回落，图库结果记录扩大的尺寸。
+
+独立浏览器和本地模拟接口验证桌面侧栏改动、显示／隐藏高级设置、1.5× 报价与真实发出的本地请求一致、首次付费确认、模型切换、Ctrl+Enter 提交 Max，以及 390×844 / 320×568 手机布局。截图保存在 `logs/enhance-desktop-basic.png`、`logs/enhance-desktop-advanced.png`、`logs/enhance-mobile-advanced.png`、`logs/enhance-mobile-small.png`。69 项测试、类型检查、Lint 与生产构建通过；没有执行真实付费增强或实扣验证。
+
 ## Sakura 品牌与欢迎页（2026-09-29）
 
 产品名称统一为 Sakura NAI，替换原标志、页签图标、分享横幅、菜单、连接窗口和新下载文件名；深浅主题分别使用暖紫和樱粉。默认 README 为中文，新增 README.en.md，并重写本地与 Linux 部署说明。版权声明与旧图库数据库名称保留。

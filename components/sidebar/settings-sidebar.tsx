@@ -49,6 +49,7 @@ export function SettingsSidebar() {
   const isGenerating = useStore(st => st.isGenerating), isPreparing = useStore(st => st.isPreparing), cancellable = useStore(st => st.canCancelGeneration);
   const streaming = useStore(st => st.streamingBatch), account = useStore(st => st.account), client = useStore(st => st.client);
   const activeTab = useStore(st => st.activeTab), prefs = useStore(st => st.preferences), patchPrefs = useStore(st => st.patchPreferences);
+  const enhancement = useStore(st => st.enhancement);
   const [menu, setMenu] = useState(false), [sampling, setSampling] = useState(false);
   const progress = streaming?.length ? Math.round(streaming.reduce((n, tile) => n + tile.progress, 0) / streaming.length * 100) : 0;
   return <div className="flex h-full flex-col">
@@ -86,7 +87,7 @@ export function SettingsSidebar() {
         <span className="mt-1 block h-1.5 rounded bg-surface-2"><span className="block h-full rounded bg-accent" style={{ width: `${account.usage.isNegative ? 0 : account.usage.percent}%` }} /></span>
       </div>}
       {isGenerating && !cancellable ? <GenerationWait /> : isGenerating ? <Button className="h-11 w-full" onClick={cancel}>{t("Stop")} · {progress}%</Button> :
-        <Button className="h-11 w-full justify-between rounded text-sm font-bold" disabled={isPreparing} onClick={() => void generate()} aria-keyshortcuts="Meta+Enter Control+Enter"><span>{t("Generate {0} image(s)", s.nSamples)}</span><span className="rounded bg-bg px-2 py-1 text-accent"><GenerationCost /></span></Button>}
+        <Button className="h-11 w-full justify-between rounded text-sm font-bold" disabled={isPreparing} onClick={() => void generate()} aria-keyshortcuts="Meta+Enter Control+Enter"><span>{enhancement ? t("Enhance") : t("Generate {0} image(s)", s.nSamples)}</span><span className="rounded bg-bg px-2 py-1 text-accent"><GenerationCost /></span></Button>}
     </div>
     <Modal open={activeTab === "advanced"} onClose={() => setUI({ activeTab: "basic" })} title={t("Settings")} className="max-w-lg">
       <div className="space-y-5">
