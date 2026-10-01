@@ -39,10 +39,10 @@ export function EnhancePanel() {
       </div>
       <div className="min-w-0 flex-[1_1_260px]">
         <div id={id}>
-          {enhancement.advanced ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {enhancement.advanced ? <NumericSlider label={t("Magnitude")} min={1} max={5} value={enhancement.magnitude} onChange={magnitude => patch({ magnitude })} /> : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <NumericSlider label={t("Strength")} min={0.01} max={0.99} step={0.01} value={enhancement.strength} onChange={strength => patch({ strength })} />
             <NumericSlider label={t("Noise")} min={0} max={0.99} step={0.01} value={enhancement.noise} onChange={noise => patch({ noise })} />
-          </div> : <NumericSlider label={t("Magnitude")} min={1} max={5} value={enhancement.magnitude} onChange={magnitude => patch({ magnitude })} />}
+          </div>}
         </div>
         <button type="button" className="mt-3 text-sm text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-accent" aria-expanded={enhancement.advanced} aria-controls={id} onClick={() => patch({ advanced: !enhancement.advanced })}>
           {t(enhancement.advanced ? "Hide Advanced" : "Show Advanced")}
