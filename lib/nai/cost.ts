@@ -21,10 +21,15 @@ export function parseAccount(value: unknown): AccountInfo {
 
 export type CostEstimate = { total: number; base: number; references: number; encoding: number; accountKnown: boolean; usesAllowance: boolean; valid: boolean };
 /** Current dedicated V5 2x upscaler; the input pixel count selects the price tier. */
-export function upscaleCost(width: number, height: number): number | null {
+export function upscaleCost(width: number, height: number, account: AccountInfo | null = null): number | null {
   const area=width*height;
   if (!Number.isFinite(area) || area<=0 || area>3145728) return null;
+  if (activeSubscription(account) && account?.tier === 3 && area <= 640 * 640) return 0;
   return area<=1048576 ? 1 : area<=1747627 ? 2 : area<=2446678 ? 3 : 4;
+}
+function activeSubscription(account: AccountInfo | null) {
+  return !!account && ([1, 2, 3, 4].includes(account.accountType ?? 0) ||
+    (account.expiresAt !== undefined ? account.expiresAt > Date.now() / 1000 : account.active));
 }
 export function augmentCost(width: number, height: number, backgroundRemoval: boolean, account: AccountInfo | null) {
   const area = Math.max(1048576, Math.min(3145728, width * height));
@@ -44,7 +49,8 @@ export function estimateCost(s: GenerationSettings, account: AccountInfo | null,
     (account.expiresAt !== undefined ? account.expiresAt > Date.now() / 1000 : account.active));
   const opus = active && account?.tier === 3;
   const allowance = !v5 || !!(account?.usage && !account.usage.isNegative);
-  const billed = imageToolOutputSize(s);
+  // Focused inpainting bills the requested detail canvas, while the displayed result is the source size.
+  const billed = s.imageSource?.mode === "infill" && s.imageSource.focused ? s : imageToolOutputSize(s);
   const area = billed.width * billed.height;
   const free = opus && allowance && area <= 1048576 && s.steps <= 28;
   const smea = !s.imageSource && !v5 && !isV4Model(s.model) && s.autoSmea;

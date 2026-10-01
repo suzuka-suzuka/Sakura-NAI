@@ -1,8 +1,10 @@
-import { Host, Model, EventType, EmotionOptions, bytesToBase64, base64ToBytes, type Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
+import { Host, Model, EventType, EmotionOptions, bytesToBase64, base64ToBytes, Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
 import { parseImage, prepareDirectorReference } from "./media";
 import { NaiTransport } from "./transport";
 import { queryAccount } from "./account";
 import { buildPayload } from "./payload";
+import { prepareInpainting } from "./image-input";
+import { prepareFocusedInpainting } from "./focused-inpainting";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "./types";
 import { isV4Model, isV5Model, supportsStreaming, type GenerationModel } from "./models";
 
@@ -144,19 +146,32 @@ export class NaiClient {
   }
   async generate(settings: GenerationSettings, preview = true): Promise<GenerateHandle> {
     const seed = settings.seed >= 0 ? settings.seed : randomSeed();
-    const payload = buildPayload(settings, seed);
-    const streaming = preview && supportsStreaming(settings.model);
-    if (!streaming) delete payload.parameters.stream;
+    buildPayload(settings, seed); // Validate before allocating/decoding a resized image.
     const controller = new AbortController();
     this.activeController = controller;
-    const events = this.generationEvents(settings, payload, streaming, controller);
-    return { seed, streaming, events };
+    try {
+      const focused = await prepareFocusedInpainting(settings, controller.signal);
+      const inpainting = await prepareInpainting(focused?.settings ?? settings, controller.signal);
+      const prepared = inpainting.settings;
+      controller.signal.throwIfAborted();
+      const payload = buildPayload(prepared, seed);
+      const streaming = preview && supportsStreaming(settings.model);
+      if (!streaming) delete payload.parameters.stream;
+      const events = this.generationEvents(settings, payload, streaming, controller, focused?.compose ?? inpainting.compose);
+      return { seed, streaming, events };
+    } catch (error) {
+      controller.abort();
+      if (this.activeController === controller) this.activeController = undefined;
+      throw error;
+    }
   }
 
-  private async *generationEvents(settings: GenerationSettings, payload: ReturnType<typeof buildPayload>, streaming: boolean, controller: AbortController): AsyncGenerator<MsgpackEvent> {
+  private async *generationEvents(settings: GenerationSettings, payload: ReturnType<typeof buildPayload>, streaming: boolean, controller: AbortController, compose?: (url: string) => Promise<string>): AsyncGenerator<MsgpackEvent> {
     try {
       await this.addReferences(settings, payload.parameters, controller.signal);
-      yield* this.transport.generate(payload, streaming, controller.signal);
+      for await (const event of this.transport.generate(payload, streaming, controller.signal)) {
+        yield compose ? { ...event, image: new Image(base64ToBytes((await compose(event.image.toDataURL())).split(",")[1])) } : event;
+      }
     } finally {
       controller.abort();
       if (this.activeController === controller) this.activeController = undefined;

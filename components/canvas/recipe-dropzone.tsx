@@ -97,9 +97,9 @@ export function RecipeDropzone() {
             </motion.span>
             <div>
               <p className="font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-0.01em] text-fg">
-                {translateUI(" Drop to load this recipe ")}</p>
+                {translateUI("Drop to import image")}</p>
               <p className="mt-1 max-w-xs text-[12.5px] text-muted">
-                {translateUI(" A NovelAI PNG restores its prompt, seed, model, and sampling into the composer. ")}</p>
+                {translateUI("NovelAI metadata restores settings; other images become a base image.")}</p>
             </div>
           </motion.div>
         </motion.div>

@@ -35,6 +35,8 @@ export function resolveEnhanceFactor(enhancement: Enhancement, model: Generation
 
 /** Max sends the source canvas, but pricing and output use the expanded 3 MP canvas. */
 export function imageToolOutputSize(s: GenerationSettings) {
+  if (s.imageSource?.mode === "infill" && s.imageSource.focused)
+    return { width: s.imageSource.width, height: s.imageSource.height };
   if (!isV5Model(s.model) || s.imageSource?.mode !== "img2img" || !s.imageSource.upscaledEnhance)
     return { width: s.width, height: s.height };
   const factor = Math.sqrt(MAX_ENHANCE_PIXELS / (s.width * s.height));

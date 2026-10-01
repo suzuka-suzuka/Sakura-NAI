@@ -9,6 +9,31 @@ import { saveSettings, NaiClient } from "../lib/nai/client";
 import { generationSize } from "../lib/nai/models";
 import { quantizePalette } from "../lib/pixel-snap";
 import { imageToolSettings, activeGenerationSettings, enhanceFactors, enhancePrompt, imageToolOutputSize, ENHANCE_LEVELS, type Enhancement } from "../lib/nai/image-tools";
+import { resizeFrame, frameMask, frameExpands, zoomAt, focusedCrop } from "../lib/editor-geometry";
+import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
+import { prepareImageInput } from "../lib/nai/image-input";
+import { compositeInpainting, requestInpaintingMask } from "../lib/nai/inpainting-composite";
+
+test("outpainting restores source pixels even when the upstream redraws the entire canvas", () => {
+  const base = new Uint8ClampedArray([12,34,56,255, 0,0,0,0, 78,90,12,128]);
+  const generated = new Uint8ClampedArray([255,0,0,255, 20,200,40,255, 255,0,0,255]);
+  const mask = new Uint8ClampedArray([0,0,0,255, 255,255,255,255, 0,0,0,255]);
+  const result = compositeInpainting(base, generated, mask);
+  assert.deepEqual([...result], [12,34,56,255, 20,200,40,255, 78,90,12,128]);
+  assert.deepEqual([...base], [12,34,56,255, 0,0,0,0, 78,90,12,128]);
+  assert.throws(() => compositeInpainting(base, generated.slice(4), mask), /dimensions/);
+});
+
+test("the wire mask stays opaque and aligns white expansion pixels to the latent grid", () => {
+  const mask = new Uint8ClampedArray(16 * 16 * 4);
+  for (let i = 0; i < mask.length; i += 4) { mask[i + 3] = 255; if ((i / 4) % 16 >= 8) mask[i] = 255; }
+  const wire = requestInpaintingMask(mask, 16, 16);
+  for (let i = 0; i < wire.length; i += 4) {
+    assert.equal(wire[i], (i / 4) % 16 >= 8 ? 255 : 0);
+    assert.equal(wire[i + 1], wire[i]); assert.equal(wire[i + 2], wire[i]); assert.equal(wire[i + 3], 255);
+  }
+  assert.throws(() => requestInpaintingMask(new Uint8ClampedArray(16 * 16 * 4), 16, 16), /too small/);
+});
 
 const source: ImageSource = { dataUrl:"data:image/png;base64,c291cmNl", width:832, height:1216, mode:"img2img", strength:0.7, noise:0, inpaintStrength:1 };
 test("enhancement follows the current sidebar recipe and keeps its own source, size, batch and seed", () => {
@@ -109,8 +134,89 @@ test("inpainting uses matching canvas/mask, dedicated model, and rejects incompl
   assert.equal(p.parameters.mask,"bWFzaw=="); assert.equal(p.parameters.inpaintImg2ImgStrength,1);
   assert.equal(p.parameters.add_original_image,false); assert.equal(p.parameters.extra_noise_seed,4294967295);
   assert.throws(()=>buildPayload({...DEFAULT_SETTINGS,imageSource:{...imageSource,mask:undefined}},0),/mask/);
-  assert.throws(()=>buildPayload({...DEFAULT_SETTINGS,width:1024,imageSource},0),/dimensions/);
+  const resized = buildPayload({...DEFAULT_SETTINGS,width:1024,height:1024,imageSource},0);
+  assert.deepEqual([resized.parameters.width,resized.parameters.height],[1024,1024]);
+  assert.equal(estimateCost({...DEFAULT_SETTINGS,width:1024,height:1024,imageSource},null).total,30);
+  assert.equal(estimateCost({...DEFAULT_SETTINGS,width:1536,height:1536,imageSource},null).total,68);
   assert.throws(()=>buildPayload({...DEFAULT_SETTINGS,imageSource:{...source,strength:NaN}},0),/strength/);
+});
+
+test("zoom anchors the pixel under an off-center pointer, so top and bottom details stay reachable", () => {
+  const p = { x: 120, y: -200 }, pan = { x: 30, y: 40 };
+  const next = zoomAt(pan,p,2);
+  assert.deepEqual(next,{x:-60,y:280});
+  assert.deepEqual({x:(p.x-next.x)/2,y:(p.y-next.y)/2},{x:p.x-pan.x,y:p.y-pan.y});
+});
+
+test("all crop/expand handles snap to the model grid, hold the opposite edges and enforce pixel limits", () => {
+  const f={x:0,y:0,width:832,height:1216};
+  assert.deepEqual(resizeFrame(f,"w",-130,0),{x:-128,y:0,width:960,height:1216});
+  assert.deepEqual(resizeFrame(f,"n",0,129),{x:0,y:128,width:832,height:1088});
+  for(const handle of ["n","s","e","w","ne","nw","se","sw"] as const) for(const d of [-10000,-64,64,10000]) {
+    const r=resizeFrame(f,handle,d,d);
+    assert.ok(r.width>=64&&r.height>=64&&r.width<=2048&&r.height<=2048&&r.width*r.height<=3145728);
+    assert.equal(r.width%64,0);assert.equal(r.height%64,0);
+    if(handle.includes("w"))assert.equal(r.x+r.width,832);
+    if(handle.includes("n"))assert.equal(r.y+r.height,1216);
+  }
+});
+
+test("expansion masks new empty pixels and moves existing strokes; cropping never selects preserved pixels", () => {
+  const pixels = new Uint8ClampedArray(3*2*4);pixels[7]=255;
+  const expanded=frameMask(pixels,3,2,{x:-1,y:-1,width:5,height:4});
+  const selected=(x:number,y:number)=>expanded[(y*5+x)*4+3]>0;
+  assert.equal(selected(0,0),true);assert.equal(selected(4,3),true);
+  assert.equal(selected(1,1),false);assert.equal(selected(2,1),true);assert.equal(selected(3,2),false);
+  const cropped=frameMask(pixels,3,2,{x:1,y:0,width:2,height:2});
+  assert.deepEqual([...cropped.slice(0,8)],[255,70,160,255,0,0,0,0]);
+});
+
+test("outpainting is detected on every edge, including a shifted crop with smaller dimensions", () => {
+  for (const handle of ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const) {
+    const frame = resizeFrame({ x: 0, y: 0, width: 512, height: 768 }, handle, handle.includes("w") ? -64 : 64, handle.includes("n") ? -64 : 64);
+    assert.equal(frameExpands(frame, 512, 768), true);
+  }
+  assert.equal(frameExpands({ x: -64, y: 64, width: 256, height: 512 }, 512, 768), true);
+  assert.equal(frameExpands({ x: 64, y: 64, width: 256, height: 512 }, 512, 768), false);
+  assert.equal(frameExpands({ x: 0, y: 0, width: 512, height: 768 }, 512, 768), false);
+});
+
+test("V4.5 Variety+ sends the model-specific sigma at the actual request size and adds no Anlas", () => {
+  for(const model of [Model.V4_5,Model.V4_5_CUR]) {
+    const plain={...DEFAULT_SETTINGS,model},on={...plain,varietyPlus:true};
+    assert.equal(buildPayload(plain,1).parameters.skip_cfg_above_sigma,undefined);
+    assert.equal(buildPayload(on,1).parameters.skip_cfg_above_sigma,58);
+    assert.equal(buildPayload({...on,width:1024,height:1024},1).parameters.skip_cfg_above_sigma,58*Math.sqrt(1048576/(832*1216)));
+    assert.equal(estimateCost(on,null).total,estimateCost(plain,null).total);
+  }
+  assert.equal(buildPayload({...DEFAULT_SETTINGS,varietyPlus:true},1).parameters.skip_cfg_above_sigma,undefined);
+  const imported=recipeFromNovelAIMetadata([{keyword:"Comment",text:JSON.stringify({prompt:"cat",skip_cfg_above_sigma:58})}],{width:832,height:1216});
+  assert.equal(imported.settings.varietyPlus,true);
+});
+
+test("Opus small-image upscale discount requires an active known subscription", () => {
+  const opus={tier:3,active:true,anlas:1000,usage:null};
+  assert.equal(upscaleCost(640,640,opus),0);assert.equal(upscaleCost(640,704,opus),1);
+  assert.equal(upscaleCost(512,512,null),1);assert.equal(upscaleCost(512,512,{...opus,active:false}),1);
+});
+
+test("focused inpainting surrounds a detail mask with context but bills the selected request canvas", () => {
+  const mask = new Uint8ClampedArray(512*768*4);
+  for(let y=100;y<120;y++)for(let x=200;x<240;x++)mask[(y*512+x)*4]=255;
+  const crop=focusedCrop(mask,512,768,1)!;
+  assert.equal(crop.width,crop.height);assert.ok(crop.x<=200&&crop.y<=100&&crop.x+crop.width>=240&&crop.y+crop.height>=120);
+  assert.ok(crop.x>=0&&crop.y>=0&&crop.x+crop.width<=512&&crop.y+crop.height<=768);
+  assert.equal(focusedCrop(new Uint8ClampedArray(16),2,2,1),null);
+  const s={...DEFAULT_SETTINGS,model:Model.V4_5,width:1024,height:1024,imageSource:{...source,mode:"infill" as const,mask:"test",focused:true}};
+  assert.deepEqual(imageToolOutputSize(s),{width:832,height:1216});
+  assert.equal(estimateCost(s,null).total,20);
+  assert.equal(estimateCost({...s,width:1536,height:1536},null).total,45);
+  assert.deepEqual(buildPayload({...s,imageSource:{...s.imageSource,inpaintStrength:0.6}},1).parameters.img2img,{strength:0.6,color_correct:true});
+});
+
+test("canceling image preparation rejects before decoding or making a paid request", async () => {
+  const controller=new AbortController();controller.abort();
+  await assert.rejects(prepareImageInput({...DEFAULT_SETTINGS,imageSource:{...source,mode:"infill",mask:"test"}},controller.signal),{name:"AbortError"});
 });
 test("image strength is applied after rounded step cost, and inpainting never charges dormant references", () => {
   assert.equal(estimateCost({...DEFAULT_SETTINGS,imageSource:source},null).total,21);

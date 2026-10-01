@@ -11,6 +11,7 @@ export function buildPayload(s: GenerationSettings, seed: number): GenerationPay
   if (isV5Model(s.model)) return applyImageInput(buildV5Payload(s, seed), s, seed);
   if (!Object.values(Model).includes(s.model)) throw new Error("Unsupported image model");
   if (![s.width, s.height].every(n => Number.isInteger(n) && n >= 64 && n <= 2048 && n % 64 === 0)) throw new Error("Image dimensions must be multiples of 64");
+  if (s.width * s.height > 3145728) throw new Error("Image dimensions must not exceed 3,145,728 pixels");
   if (!Number.isInteger(s.nSamples) || s.nSamples < 1 || s.nSamples > 8) throw new Error("Invalid batch size");
   const modern = isV4Model(s.model);
   const chars = s.characters.filter(c => c.enabled && c.prompt.trim());
@@ -26,6 +27,7 @@ export function buildPayload(s: GenerationSettings, seed: number): GenerationPay
     sm: !modern && s.autoSmea, sm_dyn: false, dynamic_thresholding: !modern && s.dynamicThresholding,
     legacy: false, legacy_v3_extend: false, add_original_image: true,
   };
+  if (s.varietyPlus) parameters.skip_cfg_above_sigma = (s.model === Model.V4_5 || s.model === Model.V4_5_CUR ? 58 : 19) * Math.sqrt(s.width * s.height / (832 * 1216));
   if (modern) {
     const useCoords = s.useCoords !== false && chars.length > 0;
     parameters.use_coords = useCoords;

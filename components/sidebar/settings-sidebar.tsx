@@ -25,6 +25,7 @@ function SamplingPanel() {
   const modern = isV5Model(s.model) || isV4Model(s.model);
   return <div className="space-y-4 px-3 pb-3">
     <NumericSlider label={t("Steps")} value={s.steps} min={1} max={50} onChange={steps => patch({ steps })} />
+    {!isV5Model(s.model) && <button type="button" aria-pressed={s.varietyPlus} title={t("Variety+ increases variation without an extra Anlas charge.")} onClick={() => patch({ varietyPlus: !s.varietyPlus })} className={`float-right rounded px-2 py-1 text-[11px] font-semibold ${s.varietyPlus ? "bg-yellow-200 text-yellow-950" : "bg-surface-3 text-muted"}`}>Variety+</button>}
     <NumericSlider label={t("Prompt guidance (CFG)")} value={s.scale} min={1} max={10} step={0.1} onChange={scale => patch({ scale })} />
     <div className="grid grid-cols-2 gap-3">
       <label className="space-y-2 text-xs font-semibold"><span>{t("Seed")}</span><div className="flex items-center gap-1">
@@ -78,7 +79,7 @@ export function SettingsSidebar() {
     <div className="shrink-0 border-t border-border-soft bg-surface p-3">
       <div className="mb-3 rounded border border-border-soft bg-surface-2/40">
         {sampling ? <>
-          <div className="flex items-center justify-between px-3 py-2 text-xs text-muted"><span>{t("AI settings")}</span><div className="flex"><IconButton size="sm" label={t("Reset sampling settings")} onClick={() => patch({ steps: DEFAULT_SETTINGS.steps, scale: DEFAULT_SETTINGS.scale, seed: -1, sampler: DEFAULT_SETTINGS.sampler, cfgRescale: 0 })}><RotateCcw /></IconButton><IconButton size="sm" label={t("Collapse sampling")} onClick={() => setSampling(false)}><ChevronDown /></IconButton></div></div>
+          <div className="flex items-center justify-between px-3 py-2 text-xs text-muted"><span>{t("AI settings")}</span><div className="flex"><IconButton size="sm" label={t("Reset sampling settings")} onClick={() => patch({ steps: DEFAULT_SETTINGS.steps, scale: DEFAULT_SETTINGS.scale, seed: -1, sampler: DEFAULT_SETTINGS.sampler, cfgRescale: 0, varietyPlus: false })}><RotateCcw /></IconButton><IconButton size="sm" label={t("Collapse sampling")} onClick={() => setSampling(false)}><ChevronDown /></IconButton></div></div>
           <div className="max-h-[45dvh] overflow-y-auto"><SamplingPanel /></div>
         </> : <CompactSampling onExpand={() => setSampling(true)} />}
       </div>

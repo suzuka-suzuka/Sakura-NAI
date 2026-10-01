@@ -8,6 +8,7 @@ import { listContainer, listItem, spring } from "@/lib/motion";
 import { DEFAULT_CONNECTION } from "@/lib/nai/client";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { fitPreviewGrid } from "@/lib/preview-layout";
+import { imageToolOutputSize } from "@/lib/nai/image-tools";
 
 const mmss = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -30,8 +31,8 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
   useLocale();
   const steps = useStore((s) => (s.runSettings ?? s.settings).steps);
   const startedAt = useStore((s) => s.runStartedAt);
-  const width = useStore((s) => (s.runSettings ?? s.settings).width);
-  const height = useStore((s) => (s.runSettings ?? s.settings).height);
+  const width = useStore((s) => imageToolOutputSize(s.runSettings ?? s.settings).width);
+  const height = useStore((s) => imageToolOutputSize(s.runSettings ?? s.settings).height);
   const stage = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   useEffect(() => {

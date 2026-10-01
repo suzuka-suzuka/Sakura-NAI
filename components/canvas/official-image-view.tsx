@@ -29,7 +29,7 @@ export function OfficialImageView({ batch, selected }: { batch: GalleryImage[]; 
   const account = useStore(s => s.account), generate = useStore(s => s.generate), busy = useStore(s => s.isGenerating || s.isPreparing || s.isDirectorProcessing);
   const client = useStore(s => s.client);
   const [upscale, setUpscale] = useState(false);
-  const upscalePrice = upscaleCost(img.settings.width, img.settings.height);
+  const upscalePrice = upscaleCost(img.settings.width, img.settings.height, account);
   const beginEnhancement = useStore(s => s.beginEnhancement), closeEnhancement = useStore(s => s.closeEnhancement);
   const [variations, setVariations] = useState(false), [recipe, setRecipe] = useState(false), [strength, setStrength] = useState(0.5), [noise, setNoise] = useState(0);
   const [pinned, setPinned] = useState<GalleryImage | null>(null);

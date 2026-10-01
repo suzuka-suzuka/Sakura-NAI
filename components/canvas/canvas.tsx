@@ -119,7 +119,7 @@ function EmptyState() {
           this line is what tells anyone it exists — and the button keeps it reachable without a
           pointer, which a drop target alone can never be. */}
       <motion.p variants={listItem} className="relative text-[12px] text-muted">
-        {translateUI(" Have a NovelAI PNG?")}{" "}
+        {translateUI("Have an image?")}{" "}
         <button
           type="button"
           onClick={pickRecipeFile}
@@ -128,7 +128,7 @@ function EmptyState() {
             focusRing,
           )}
         >
-          {translateUI(" Import its recipe ")}</button>{" "}
+          {translateUI("Import image or recipe")}</button>{" "}
         {translateUI(" or drop it anywhere. ")}</motion.p>
 
       <motion.p variants={listItem} className="relative mb-auto pb-2 text-[11.5px] leading-7 text-muted">

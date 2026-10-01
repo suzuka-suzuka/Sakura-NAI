@@ -136,7 +136,7 @@ export function CommandPalette() {
       },
       {
         id: "import-recipe",
-        label: translateUI("Import recipe from PNG…"),
+        label: translateUI("Import image or recipe…"),
         hint: translateUI("Or drop the file anywhere"),
         group: "Actions",
         icon: <FileImage />,

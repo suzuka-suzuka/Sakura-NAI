@@ -23,6 +23,10 @@ export type ImageSource = {
   strength: number;
   noise: number;
   inpaintStrength: number;
+  /** Generate only the mask's surrounding crop and composite it back into the source. */
+  focused?: boolean;
+  /** Preserve the paid/requested crop dimensions when a gallery entry records full output dimensions. */
+  focusedTarget?: { width: number; height: number };
   /** V5 Enhance Max: source-size request, expanded output and billing canvas. */
   upscaledEnhance?: boolean;
 };
@@ -56,6 +60,7 @@ export type GenerationSettings = {
   nSamples: number;
   dynamicThresholding: boolean;
   autoSmea: boolean;
+  varietyPlus: boolean;
   transparentBackground: boolean;
   autoText: boolean;
   useCoords: boolean;
@@ -84,6 +89,7 @@ export const DEFAULT_SETTINGS: GenerationSettings = {
   nSamples: 1,
   dynamicThresholding: false,
   autoSmea: false,
+  varietyPlus: false,
   transparentBackground: false,
   autoText: true,
   useCoords: false,

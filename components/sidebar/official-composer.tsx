@@ -135,6 +135,8 @@ export function ImageInputPanel() {
         <NumericSlider label={t("Strength")} min={0.01} max={1} step={0.01} value={source.mode === "infill" ? source.inpaintStrength : source.strength} onChange={v => patch({ imageSource: { ...source, ...(source.mode === "infill" ? { inpaintStrength: v } : { strength: v }) } })} />
         {source.mode === "img2img" && <NumericSlider label={t("Noise")} min={0} max={1} step={0.01} value={source.noise} onChange={noise => patch({ imageSource: { ...source, noise } })} />}
         {source.mode === "infill" && <button className="flex items-center gap-2 text-xs text-fg-2" onClick={() => setUI({ imageEditor: { mode: "mask", source: source.dataUrl } })}><Eraser className="size-3" />{t("Edit mask")}</button>}
+        {source.mode === "infill" && <label className="block text-xs"><input type="checkbox" className="mr-2 accent-accent" checked={source.focused ?? false} onChange={e=>patch({ imageSource:{...source,focused:e.target.checked},...(e.target.checked?{width:1024,height:1024}:{}) })} />{t("Focused inpainting")}
+          {source.focused && <span className="mt-1 block text-muted">{t("Upscale the masked region for detail, then paste it back. The rest of the image stays intact.")}</span>}</label>}
       </div>}
     </div>
     {!isV5Model(s.model) && <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details>}
@@ -147,7 +149,6 @@ export function OfficialComposer() {
   const s = useStore(st => st.settings), patch = useStore(st => st.patchSettings);
   const [tier, aspect] = tierAspectForSize(s.width, s.height);
   const setSize = (nextTier: string, nextAspect: string) => { const p = presetDims(nextTier, nextAspect); if (p) patch({ width: p.w, height: p.h }); };
-  const locked = s.imageSource?.mode === "infill";
   return <>
     <div className="flex items-center gap-2 px-3 py-3">
       <span className="text-[13px] text-fg-2">{t("Model")}</span>
@@ -164,21 +165,22 @@ export function OfficialComposer() {
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-semibold">{t("Resolution")}</span>
         <div className="flex items-center rounded bg-surface-2">
-          <input aria-label={t("Width")} type="number" min={64} max={2048} step={64} disabled={locked} value={s.width} onChange={e => patch({ width: Number(e.target.value) })}
+          <input aria-label={t("Width")} type="number" min={64} max={2048} step={64} value={s.width} onChange={e => patch({ width: Number(e.target.value) })}
             onBlur={e => patch({ width: Math.max(64, Math.min(2048, Math.round(Number(e.target.value) / 64) * 64)) })} className="w-16 bg-transparent p-1 text-center text-xs outline-none" />
-          <IconButton size="sm" label={t("Swap width and height")} disabled={locked} onClick={() => patch({ width: s.height, height: s.width })}><ArrowLeftRight className="size-3" /></IconButton>
-          <input aria-label={t("Height")} type="number" min={64} max={2048} step={64} disabled={locked} value={s.height} onChange={e => patch({ height: Number(e.target.value) })}
+          <IconButton size="sm" label={t("Swap width and height")} onClick={() => patch({ width: s.height, height: s.width })}><ArrowLeftRight className="size-3" /></IconButton>
+          <input aria-label={t("Height")} type="number" min={64} max={2048} step={64} value={s.height} onChange={e => patch({ height: Number(e.target.value) })}
             onBlur={e => patch({ height: Math.max(64, Math.min(2048, Math.round(Number(e.target.value) / 64) * 64)) })} className="w-16 bg-transparent p-1 text-center text-xs outline-none" />
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Select aria-label={t("Resolution category")} disabled={locked} className="h-9 w-28 rounded px-2 text-xs" value={tier ?? "custom"} onChange={e => setSize(e.target.value, aspect ?? "portrait")}>
+        <Select aria-label={t("Resolution category")} className="h-9 w-28 rounded px-2 text-xs" value={tier ?? "custom"} onChange={e => setSize(e.target.value, aspect ?? "portrait")}>
           {SIZE_TIERS.map(v => <option key={v} value={v}>{t(v.charAt(0).toUpperCase() + v.slice(1))}</option>)}<option value="custom">{t("Custom")}</option>
         </Select>
         <div className="flex flex-1 rounded bg-surface-2 p-1">
-          {([["landscape", RectangleHorizontal], ["portrait", RectangleVertical], ["square", Square]] as const).map(([a, Icon]) => <button key={a} aria-label={t(a.charAt(0).toUpperCase() + a.slice(1))} aria-pressed={aspect === a} disabled={locked || (tier === "wallpaper" && a === "square")} onClick={() => setSize(tier ?? "normal", a)} className={cn("flex h-7 flex-1 items-center justify-center rounded disabled:opacity-30", aspect === a && "bg-surface-3")}><Icon className="size-4" /></button>)}
+          {([["landscape", RectangleHorizontal], ["portrait", RectangleVertical], ["square", Square]] as const).map(([a, Icon]) => <button key={a} aria-label={t(a.charAt(0).toUpperCase() + a.slice(1))} aria-pressed={aspect === a} disabled={tier === "wallpaper" && a === "square"} onClick={() => setSize(tier ?? "normal", a)} className={cn("flex h-7 flex-1 items-center justify-center rounded disabled:opacity-30", aspect === a && "bg-surface-3")}><Icon className="size-4" /></button>)}
         </div>
       </div>
+      {s.imageSource?.mode === "infill" && <p className="text-xs text-muted">{t("The image and mask resize together to this output resolution.")}</p>}
       <div className="text-sm font-semibold">{t("Number of images")}</div>
       <div className="flex gap-1 rounded border border-border-soft bg-bg p-1">
         {Array.from({ length: maxSamples(s.model, s.width, s.height) }, (_, i) => i + 1).map(n => <button key={n} aria-label={t("Generate {0} images", n)} aria-pressed={s.nSamples === n} onClick={() => patch({ nSamples: n })} className={cn("h-8 flex-1 rounded text-sm", s.nSamples === n ? "bg-surface-3 text-fg" : "text-muted hover:bg-surface")}>{n}</button>)}

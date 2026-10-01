@@ -34,6 +34,19 @@ function setup(t: TestContext, patch: Partial<GenerationSettings> = {}) {
   return { client, generate };
 }
 
+test("focused inpainting saves full output dimensions while restoring its priced detail request", async t => {
+  const imageSource={dataUrl:"data:image/png;base64,source",width:640,height:768,mode:"infill" as const,mask:"mask",strength:0.7,noise:0,inpaintStrength:1,focused:true};
+  const {generate}=setup(t,{model:Model.V4_5,width:1024,height:1024,imageSource});
+  await useStore.getState().generate();
+  const result=useStore.getState().selectedImage!;
+  assert.deepEqual([generate.mock.calls[0].arguments[0].width,generate.mock.calls[0].arguments[0].height],[1024,1024]);
+  assert.deepEqual([result.settings.width,result.settings.height],[640,768]);
+  assert.deepEqual(result.settings.imageSource?.focusedTarget,{width:1024,height:1024});
+  useStore.getState().restoreSettings(result.settings);
+  assert.deepEqual([useStore.getState().settings.width,useStore.getState().settings.height],[1024,1024]);
+  assert.equal(estimateCost(useStore.getState().settings,opus).total,0);
+});
+
 test("V5 preset tooltips and actual payload use identical official text", () => {
   for (const quality of QUALITY_PRESETS) {
     const s = settings({ qualityPreset: quality.value, qualityToggle: quality.value !== "none" });

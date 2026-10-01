@@ -21,6 +21,10 @@ Enhancement constants: https://github.com/Aaalice233/Aaalice_NAI_Launcher/blob/m
 
 Enhancement billing: https://github.com/Aaalice233/Aaalice_NAI_Launcher/blob/main/lib/presentation/providers/cost_estimate_provider.dart
 
+The canvas crop/expansion, focused inpainting workflow, Variety+ sigma scaling, and Opus small-image upscale discount were also checked against this project's implementation at commit c648ee60316e58a5ec45c539e28023f8a56c2db7. The browser canvas implementation is application-owned; its source references are lib/core/utils/inpaint_outpaint_utils.dart, lib/core/utils/focused_inpaint_utils.dart, lib/core/network/request_builders/nai_image_request_builder.dart, and lib/core/services/anlas_calculator.dart.
+
+The application-owned inpainting mask preparation and result compositor also refer to the public request-mask workflow in lib/core/utils/inpaint_mask/inpaint_mask_operations.dart (8px latent-grid sampling, opaque black/white full-size request masks, and client-side result composition). The regular workflow uses the same binary request mask for composition; it does not reproduce that project's dilated soft composite mask.
+
 MIT License
 
 Copyright (c) 2026 NAI Launcher Contributors

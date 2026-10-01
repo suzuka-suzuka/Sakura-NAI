@@ -258,6 +258,12 @@ export function recipeFromNovelAIMetadata(
   }
 
   const autoSmea = boolean(pick(bag, "autoSmea", "auto_smea", "sm"));
+  const variety = boolean(pick(bag, "varietyPlus", "variety_plus"));
+  const sigma = number(pick(bag, "skip_cfg_above_sigma"));
+  if (variety !== null || sigma !== null) {
+    settings.varietyPlus = variety ?? (sigma! > 0);
+    imported.add("Variety+");
+  }
   if (autoSmea !== null) {
     settings.autoSmea = autoSmea;
     imported.add("SMEA");

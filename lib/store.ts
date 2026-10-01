@@ -220,7 +220,8 @@ export const useStore = create<Store>()((set, get) => ({
       prev.vibe.length > 0 ||
       prev.directorReference.length > 0;
 
-    set({ settings: { ...DEFAULT_SETTINGS, ...snapshot } });
+    set({ settings: { ...DEFAULT_SETTINGS, ...snapshot,
+      ...(snapshot.imageSource?.mode === "infill" && snapshot.imageSource.focused && snapshot.imageSource.focusedTarget ? snapshot.imageSource.focusedTarget : {}) } });
     toast.success(options?.message ?? translateUI("Restored — seed {0}, {1} steps", snapshot.seed, snapshot.steps), {
       id: options?.toastId,
       // Only offered when something was actually overwritten. On a fresh form — the common case
@@ -545,7 +546,8 @@ export const useStore = create<Store>()((set, get) => ({
             filename: `sakura_${batchId}_${i + 1}.png`,
             seed: (baseSeed + f.sampleIndex) >>> 0,
             settings: { ...settings, ...imageToolOutputSize(settings), seed: (baseSeed + f.sampleIndex) >>> 0,
-              imageSource: settings.imageSource?.upscaledEnhance ? null : settings.imageSource },
+              imageSource: settings.imageSource?.upscaledEnhance ? null : settings.imageSource?.focused
+                ? { ...settings.imageSource, focusedTarget: { width: settings.width, height: settings.height } } : settings.imageSource },
             batchId,
             batchIndex: i,
             batchSize: ordered.length,
