@@ -25,6 +25,7 @@ import { supportsStreaming, isV5Model, maxSamples } from "@/lib/nai/models";
 import { CHARACTER_STARTERS, type CharacterKind } from "@/lib/nai/characters";
 import { activeGenerationSettings, enhanceFactors, ENHANCE_LEVELS, imageToolOutputSize, type Enhancement } from "@/lib/nai/image-tools";
 import type { EmotionOptions, Image } from "@/lib/nai/protocol";
+import type { ImageImportCandidate } from "@/lib/recipe-import";
 import {
   loadImages,
   saveImage,
@@ -145,12 +146,13 @@ type Store = {
   showDirector: boolean;
   showPositions: boolean;
   imageEditor: { mode: "draw" | "mask"; source: string | null } | null;
+  imageImport: ImageImportCandidate | null;
   focusedIndex: number | null;
   setUI: (
     patch: Partial<
       Pick<
         Store,
-        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor"
+        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor" | "imageImport"
       >
     >,
   ) => void;
@@ -727,6 +729,7 @@ export const useStore = create<Store>()((set, get) => ({
   showDirector: false,
   showPositions: false,
   imageEditor: null,
+  imageImport: null,
   focusedIndex: null,
   setUI: (patch) => set(patch),
 

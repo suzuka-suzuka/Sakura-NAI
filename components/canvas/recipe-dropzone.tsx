@@ -4,7 +4,7 @@ import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { FileImage } from "lucide-react";
-import { importRecipeFile } from "@/lib/recipe-import";
+import { prepareImageImport } from "@/lib/recipe-import";
 import { spring, usePrefersReducedMotion } from "@/lib/motion";
 
 /** True only for a drag carrying files — dragging selected text or an image within the page must
@@ -14,7 +14,7 @@ function isFileDrag(e: DragEvent) {
 }
 
 /**
- * Whole-window drop target for NovelAI PNG recipes.
+ * Whole-window drop target for choosing how to use an image.
  *
  * Listening on `window` rather than on the stage element means the drop lands wherever the user
  * releases — over the canvas, the sidebar, the gallery — which is what people actually do. The
@@ -52,7 +52,7 @@ export function RecipeDropzone() {
       e.preventDefault();
       depth.current = 0;
       setActive(false);
-      void importRecipeFile(e.dataTransfer?.files?.[0]);
+      void prepareImageImport(e.dataTransfer?.files?.[0]);
     };
 
     window.addEventListener("dragenter", onEnter);
@@ -99,7 +99,7 @@ export function RecipeDropzone() {
               <p className="font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-0.01em] text-fg">
                 {translateUI("Drop to import image")}</p>
               <p className="mt-1 max-w-xs text-[12.5px] text-muted">
-                {translateUI("NovelAI metadata restores settings; other images become a base image.")}</p>
+                {translateUI("Choose parameters, Image2Image, Vibe Transfer, or character reference after dropping.")}</p>
             </div>
           </motion.div>
         </motion.div>

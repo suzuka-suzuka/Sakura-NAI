@@ -12,6 +12,7 @@ import { ConnectModal } from "./connect-modal";
 import { SettingsSidebar } from "./sidebar/settings-sidebar";
 import { Canvas } from "./canvas/canvas";
 import { RecipeDropzone } from "./canvas/recipe-dropzone";
+import { ImageImportModal } from "./canvas/image-import-modal";
 import { Lightbox } from "./canvas/lightbox";
 import { DirectorModal } from "./canvas/director-modal";
 import { HistoryPanel } from "./gallery/history-panel";
@@ -56,7 +57,7 @@ export function Studio({ connectionOptions }: { connectionOptions: ConnectionOpt
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
-      if (s.showConnect || s.showDirector || s.pendingPayment || s.isPreparing || s.focusedIndex !== null || s.imageEditor) return;
+      if (s.showConnect || s.showDirector || s.pendingPayment || s.isPreparing || s.focusedIndex !== null || s.imageEditor || s.imageImport) return;
 
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -192,6 +193,7 @@ export function Studio({ connectionOptions }: { connectionOptions: ConnectionOpt
       <ImageEditor />
       <Lightbox />
       <CommandPalette />
+      <ImageImportModal />
     </div>
   );
 }

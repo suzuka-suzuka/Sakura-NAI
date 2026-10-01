@@ -572,5 +572,14 @@
   "Canvas height": "画布高度",
   "Apply canvas size": "应用画布尺寸",
   "Focused inpainting": "聚焦重绘",
-  "Upscale the masked region for detail, then paste it back. The rest of the image stays intact.": "将蒙版附近放大生成细节，再贴回原图，保留蒙版外的内容。"
+  "Upscale the masked region for detail, then paste it back. The rest of the image stays intact.": "将蒙版附近放大生成细节，再贴回原图，保留蒙版外的内容。",
+  "Reading image and generation metadata…": "正在读取图片和生成参数…",
+  "How would you like to use this image?": "这张图片要用来做什么？",
+  "Import image parameters": "导入图片参数",
+  "Use as Image2Image base": "用作图生图底图",
+  "Use for Vibe Transfer": "用作风格迁移",
+  "Use as character reference": "用作角色参考",
+  "Added {0} for Vibe Transfer. Model switched to V4.5 Full.": "已将 {0} 添加为风格迁移参考图，模型已切换到 V4.5 Full。",
+  "Added {0} as a character reference. Model switched to V4.5 Full.": "已将 {0} 添加为角色参考图，模型已切换到 V4.5 Full。",
+  "Choose parameters, Image2Image, Vibe Transfer, or character reference after dropping.": "松开后选择：导入参数、图生图底图、风格迁移或角色参考。"
 }

@@ -91,6 +91,7 @@ export function CommandPalette() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
+        if (useStore.getState().imageImport) return;
         e.preventDefault();
         if (open) close();
         else openPalette();
