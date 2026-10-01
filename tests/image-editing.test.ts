@@ -9,7 +9,7 @@ import { saveSettings, NaiClient } from "../lib/nai/client";
 import { generationSize } from "../lib/nai/models";
 import { quantizePalette } from "../lib/pixel-snap";
 import { imageToolSettings, activeGenerationSettings, enhanceFactors, enhancePrompt, imageToolOutputSize, ENHANCE_LEVELS, type Enhancement } from "../lib/nai/image-tools";
-import { resizeFrame, frameMask, frameExpands, zoomAt, focusedCrop } from "../lib/editor-geometry";
+import { resizeFrame, frameMask, zoomAt, focusedCrop } from "../lib/editor-geometry";
 import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
 import { prepareImageInput } from "../lib/nai/image-input";
 import { compositeInpainting, requestInpaintingMask } from "../lib/nai/inpainting-composite";
@@ -169,16 +169,6 @@ test("expansion masks new empty pixels and moves existing strokes; cropping neve
   assert.equal(selected(1,1),false);assert.equal(selected(2,1),true);assert.equal(selected(3,2),false);
   const cropped=frameMask(pixels,3,2,{x:1,y:0,width:2,height:2});
   assert.deepEqual([...cropped.slice(0,8)],[255,70,160,255,0,0,0,0]);
-});
-
-test("outpainting is detected on every edge, including a shifted crop with smaller dimensions", () => {
-  for (const handle of ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const) {
-    const frame = resizeFrame({ x: 0, y: 0, width: 512, height: 768 }, handle, handle.includes("w") ? -64 : 64, handle.includes("n") ? -64 : 64);
-    assert.equal(frameExpands(frame, 512, 768), true);
-  }
-  assert.equal(frameExpands({ x: -64, y: 64, width: 256, height: 512 }, 512, 768), true);
-  assert.equal(frameExpands({ x: 64, y: 64, width: 256, height: 512 }, 512, 768), false);
-  assert.equal(frameExpands({ x: 0, y: 0, width: 512, height: 768 }, 512, 768), false);
 });
 
 test("V4.5 Variety+ sends the model-specific sigma at the actual request size and adds no Anlas", () => {

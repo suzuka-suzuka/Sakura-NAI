@@ -563,8 +563,6 @@
   "Editor viewport": "编辑器视图",
   "Resize canvas {0}": "调整画布边缘 {0}",
   "Drag inward to crop, outward to expand": "向内拖动裁剪，向外拖动扩图",
-  "The original image is preserved. Only the masked area will be generated.": "已保留原图，仅生成蒙版选中的区域。",
-  "Wheel: zoom at pointer · Space / middle button: pan · Drag edges: crop / expand": "滚轮：以鼠标位置缩放 · 空格／中键：拖动视图 · 拖动边缘：裁剪／扩图",
   "Pan canvas": "拖动画布",
   "Crop / expand canvas": "裁剪／扩展画布",
   "Fit canvas": "适应窗口",

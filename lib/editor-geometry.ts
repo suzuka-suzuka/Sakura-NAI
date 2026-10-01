@@ -2,11 +2,6 @@ export type Point = { x: number; y: number };
 export type Frame = Point & { width: number; height: number };
 export type FrameHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
-/** Even a smaller crop can add new pixels when it crosses a source edge. */
-export function frameExpands(frame: Frame, sourceWidth: number, sourceHeight: number): boolean {
-  return frame.x < 0 || frame.y < 0 || frame.x + frame.width > sourceWidth || frame.y + frame.height > sourceHeight;
-}
-
 /** Keep the pixel under the pointer fixed as the viewport zoom changes. */
 export function zoomAt(pan: Point, pointer: Point, ratio: number): Point {
   return { x: pointer.x + (pan.x - pointer.x) * ratio, y: pointer.y + (pan.y - pointer.y) * ratio };

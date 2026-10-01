@@ -10,13 +10,13 @@ import { Button } from "@/components/ui/button";
 import { floodFill, opaqueMask } from "@/lib/canvas-tools";
 import { cn } from "@/lib/utils";
 import { useImageViewport } from "@/lib/use-image-viewport";
-import { resizeFrame, frameMask, frameExpands, type Frame, type FrameHandle } from "@/lib/editor-geometry";
+import { resizeFrame, frameMask, type Frame, type FrameHandle } from "@/lib/editor-geometry";
 import { generationSize } from "@/lib/nai/models";
 import { useFocusTrap } from "@/lib/use-overlay";
 
 type Tool = "brush" | "eraser" | "fill" | "rectangle" | "ellipse" | "line" | "picker" | "hand" | "frame";
 type Layer = { id: number; name: string; url: string; visible: boolean; opacity: number };
-type Snapshot = { mode: "draw" | "mask"; layers: Layer[]; dimensions: { w: number; h: number }; base: string | null };
+type Snapshot = { layers: Layer[]; dimensions: { w: number; h: number }; base: string | null };
 const handles: { id: FrameHandle; x: number; y: number; cursor: string }[] = [
   { id: "nw", x: 0, y: 0, cursor: "nwse-resize" }, { id: "n", x: 0.5, y: 0, cursor: "ns-resize" }, { id: "ne", x: 1, y: 0, cursor: "nesw-resize" },
   { id: "w", x: 0, y: 0.5, cursor: "ew-resize" }, { id: "e", x: 1, y: 0.5, cursor: "ew-resize" },
@@ -29,9 +29,8 @@ export function ImageEditor() {
   return editor ? <EditorSession key={`${editor.mode}:${editor.source?.length ?? 0}`} mode={editor.mode} source={editor.source} /> : null;
 }
 
-function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; source: string | null }) {
+function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string | null }) {
   useLocale();
-  const [mode, setMode] = useState(initialMode);
   const settings = useStore(s => s.settings), patch = useStore(s => s.patchSettings), setUI = useStore(s => s.setUI);
   const [layers, setLayers] = useState<Layer[]>([{ id: 1, name: t(mode === "mask" ? "Mask" : "Layer") + " 1", url: "", visible: true, opacity: 1 }]);
   const [active, setActive] = useState(1), [tool, setTool] = useState<Tool>("brush"), [size, setSize] = useState(20), [color, setColor] = useState("#222222"), [square, setSquare] = useState(false);
@@ -52,6 +51,9 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
   const gesture = useRef<{ x: number; y: number; before: ImageData } | null>(null), nextId = useRef(2), file = useRef<HTMLInputElement>(null);
   const { w, h } = dimensions;
   const { container: viewportContainer, zoom: viewportZoom, fit: viewportFit, scale: viewportScale, panning: viewportPanning, startPan: viewportStartPan, movePan: viewportMovePan, endPan: viewportEndPan, changeZoom: viewportChangeZoom, reset: viewportReset, style: viewportStyle } = useImageViewport(w, h);
+  // Size is measured on screen; compensate the stroke and cursor together so
+  // zooming in can paint finer details without enlarging the brush.
+  const brushSize = size / (viewportScale || 1);
   const current = layers.find(l => l.id === active)!;
 
   useEffect(() => {
@@ -108,14 +110,14 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const snapshot = (): Snapshot => ({ mode, layers: layers.map(l => ({ ...l })), dimensions, base });
+  const snapshot = (): Snapshot => ({ layers: layers.map(l => ({ ...l })), dimensions, base });
   const checkpoint = () => { setHistory(h => [...h.slice(-19), snapshot()]); setFuture([]); };
   const commit = () => { if (canvas.current) setLayers(ls => ls.map(l => l.id === active ? { ...l, url: canvas.current!.toDataURL("image/png") } : l)); };
-  const restore = (s: Snapshot) => { setMode(s.mode); setLayers(s.layers); setDimensions(s.dimensions); setBase(s.base); setActive(s.layers.at(-1)!.id); setFrame(null); viewportReset(); };
+  const restore = (s: Snapshot) => { setLayers(s.layers); setDimensions(s.dimensions); setBase(s.base); setActive(s.layers.at(-1)!.id); setFrame(null); viewportReset(); };
   const undo = () => { if (!history.length || busy || gesture.current) return; setFuture(f => [snapshot(), ...f]); restore(history[history.length - 1]); setHistory(history.slice(0, -1)); };
   const redo = () => { if (!future.length || busy || gesture.current) return; setHistory(h => [...h, snapshot()]); restore(future[0]); setFuture(future.slice(1)); };
   const point = (e: React.PointerEvent<HTMLCanvasElement>) => { const r = e.currentTarget.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * w, y: (e.clientY - r.top) / r.height * h }; };
-  const style = (ctx: CanvasRenderingContext2D) => { ctx.lineWidth = size; ctx.lineCap = square ? "square" : "round"; ctx.lineJoin = "round"; ctx.strokeStyle = ctx.fillStyle = mode === "mask" ? "#ff46a0" : color; ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over"; };
+  const style = (ctx: CanvasRenderingContext2D) => { ctx.lineWidth = brushSize; ctx.lineCap = square ? "square" : "round"; ctx.lineJoin = "round"; ctx.strokeStyle = ctx.fillStyle = mode === "mask" ? "#ff46a0" : color; ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over"; };
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || space))) { e.preventDefault(); viewportStartPan(e); setCursor(null); return; }
     if (e.button !== 0 || busy || tool === "frame" || !ready.current || !current.visible) return;
@@ -156,20 +158,17 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
         if (url) { const img = new Image(); img.src = url; await img.decode(); c.getContext("2d")!.drawImage(img, -next.x, -next.y, w, h); }
         return c.toDataURL("image/png");
       };
-      const merged = mode === "mask" || frameExpands(next, w, h) ? await composite() : null;
-      const pixels = merged?.getContext("2d")!.getImageData(0, 0, w, h);
-      const outpaint = mode === "draw" && !!pixels?.data.some((v, i) => i % 4 === 3 && v > 0);
-      // Drawing layers become the preserved source, never the mask: their alpha
-      // would otherwise select the whole original image for regeneration.
-      const nextBase = outpaint ? await translate(merged!.toDataURL("image/png")) : base ? await translate(base) : null;
+      const nextBase = base ? await translate(base) : null;
       let nextLayers: Layer[];
-      if (mode === "mask" || outpaint) {
+      if (mode === "mask") {
+        const merged = await composite();
+        const pixels = merged.getContext("2d")!.getImageData(0, 0, w, h);
         const mask = document.createElement("canvas"); mask.width = next.width; mask.height = next.height;
         const ctx = mask.getContext("2d")!, result = ctx.createImageData(next.width, next.height);
-        result.data.set(frameMask(outpaint ? new Uint8ClampedArray(w * h * 4) : pixels!.data, w, h, next)); ctx.putImageData(result, 0, 0);
+        result.data.set(frameMask(pixels.data, w, h, next)); ctx.putImageData(result, 0, 0);
         nextLayers = [{ id: nextId.current++, name: t("Mask"), url: mask.toDataURL("image/png"), visible: true, opacity: 1 }];
       } else nextLayers = await Promise.all(layers.map(async l => ({ ...l, url: l.url ? await translate(l.url) : "" })));
-      checkpoint(); if (outpaint) setMode("mask"); setBase(nextBase); setDimensions({ w: next.width, h: next.height }); setLayers(nextLayers); setActive(nextLayers.at(-1)!.id); setFrame(null); viewportReset();
+      checkpoint(); setBase(nextBase); setDimensions({ w: next.width, h: next.height }); setLayers(nextLayers); setActive(nextLayers.at(-1)!.id); setFrame(null); viewportReset();
     } catch (error) { toast.error(String(error)); }
     finally { setBusy(false); }
   };
@@ -200,7 +199,7 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
         const input = document.createElement("canvas"); input.width = w; input.height = h;
         if (base) { const img = new Image(); img.src = base; await img.decode(); input.getContext("2d")!.drawImage(img, 0, 0, w, h); }
         const output = initial.hasInput && w === initial.dimensions.w && h === initial.dimensions.h ? initial.output : { width: w, height: h };
-        patch({ ...output, imageSource: { dataUrl: input.toDataURL("image/png"), width:w, height:h, mask:c.toDataURL("image/png"), mode:"infill", strength:settings.imageSource?.strength ?? 0.7, noise:0, inpaintStrength:settings.imageSource?.inpaintStrength ?? 1, focused: initialMode === "mask" && (settings.imageSource?.focused ?? false) } });
+        patch({ ...output, imageSource: { dataUrl: input.toDataURL("image/png"), width:w, height:h, mask:c.toDataURL("image/png"), mode:"infill", strength:settings.imageSource?.strength ?? 0.7, noise:0, inpaintStrength:settings.imageSource?.inpaintStrength ?? 1, focused: settings.imageSource?.focused ?? false } });
       } else patch({ width:w,height:h,imageSource:{ dataUrl:c.toDataURL("image/png"),width:w,height:h,mode:"img2img",strength:settings.imageSource?.strength ?? 0.7,noise:settings.imageSource?.noise ?? 0,inpaintStrength:1 } });
       setUI({ imageEditor:null,settingsCollapsed:false });
     } catch (error) { toast.error(String(error)); }
@@ -221,7 +220,6 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
       </div>
       <div className="flex items-center gap-1"><IconButton label={t("Download canvas")} onClick={()=>void composite().then(c=>{const a=document.createElement("a");a.href=c.toDataURL("image/png");a.download="canvas.png";a.click();})}><Download /></IconButton><Button disabled={busy} onClick={()=>void save()}>{t("Save and close")}</Button><IconButton label={t("Close editor")} onClick={()=>setUI({imageEditor:null})}><X /></IconButton></div>
     </header>
-    {initialMode === "draw" && mode === "mask" && <p className="px-3 pb-2 text-center text-xs text-muted">{t("The original image is preserved. Only the masked area will be generated.")}</p>}
     {tool === "frame" && <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 px-3 pb-3 text-xs">
       <span>{t("Canvas size")}</span>
       {(["width", "height"] as const).map(key=><label key={key}>{t(key === "width" ? "Width" : "Height")} <input type="number" min={64} max={2048} step={64} aria-label={t(key === "width" ? "Canvas width" : "Canvas height")}
@@ -235,7 +233,7 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
         <div className="checkerboard absolute" style={viewportStyle}>
           {mode === "mask" && base && <img src={base} alt="" className="pointer-events-none absolute inset-0 h-full w-full" />}
           {layers.map(layer=>layer.id===active ? <canvas key={layer.id} ref={canvas} width={w} height={h} aria-label={t("Drawing canvas")} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={()=>setCursor(null)} className="absolute inset-0 h-full w-full touch-none" style={{opacity:layer.visible?layer.opacity*(mode==="mask"?0.55:1):0,zIndex:layers.indexOf(layer)+1,cursor:tool==="hand"||space?viewportPanning?"grabbing":"grab":tool==="brush"||tool==="eraser"?"none":"crosshair"}} /> : layer.visible&&layer.url ? <img key={layer.id} src={layer.url} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{opacity:layer.opacity,zIndex:layers.indexOf(layer)+1}} /> : null)}
-          {cursor && !space && !viewportPanning && (tool === "brush" || tool === "eraser") && <div aria-hidden data-brush-outline className="pointer-events-none absolute z-40 border border-white shadow-[0_0_0_1px_#222]" style={{ left: cursor.x / w * 100 + "%", top: cursor.y / h * 100 + "%", width: size / w * 100 + "%", height: size / h * 100 + "%", transform: "translate(-50%, -50%)", borderRadius: square ? 0 : "50%", borderWidth: 1 / viewportZoom }} />}
+          {cursor && !space && !viewportPanning && (tool === "brush" || tool === "eraser") && <div aria-hidden data-brush-outline className="pointer-events-none absolute z-40 border border-white shadow-[0_0_0_1px_#222]" style={{ left: cursor.x / w * 100 + "%", top: cursor.y / h * 100 + "%", width: brushSize / w * 100 + "%", height: brushSize / h * 100 + "%", transform: "translate(-50%, -50%)", borderRadius: square ? 0 : "50%", borderWidth: 1 / viewportZoom }} />}
           {(mode === "mask" || tool === "frame") && <div className="pointer-events-none absolute z-50 border-2 border-accent" style={{ left: (frame?.x ?? 0) / w * 100 + "%", top: (frame?.y ?? 0) / h * 100 + "%", width: (frame?.width ?? w) / w * 100 + "%", height: (frame?.height ?? h) / h * 100 + "%", borderWidth: 1 / viewportZoom }}>
             {frame && <span className="absolute bottom-full left-0 whitespace-nowrap bg-bg px-2 py-1 text-xs" style={{ transformOrigin: "bottom left", transform: `scale(${1 / viewportZoom})` }}>{frame.width} × {frame.height}</span>}
             {handles.map(handle => <button key={handle.id} type="button" aria-label={t("Resize canvas {0}", handle.id)} title={t("Drag inward to crop, outward to expand")}
@@ -243,7 +241,6 @@ function EditorSession({ mode: initialMode, source }: { mode: "draw" | "mask"; s
               className="pointer-events-auto absolute rounded-sm border border-white bg-accent touch-none" style={{ left: handle.x * 100 + "%", top: handle.y * 100 + "%", width: 12 / viewportZoom, height: 12 / viewportZoom, transform: "translate(-50%, -50%)", cursor: handle.cursor }} />)}
           </div>}
         </div>
-        <div className="pointer-events-none absolute bottom-2 left-2 text-[10px] text-muted">{t("Wheel: zoom at pointer · Space / middle button: pan · Drag edges: crop / expand")}</div>
       </div>
       <aside className="flex w-20 sm:w-28 shrink-0 flex-col gap-2 overflow-y-auto rounded border border-border-soft bg-surface p-2">
         <div className="flex justify-between"><IconButton size="sm" label={t("Add layer")} onClick={add}><Plus /></IconButton><IconButton size="sm" label={t("Upload layer")} onClick={()=>file.current?.click()}><Upload /></IconButton></div>
