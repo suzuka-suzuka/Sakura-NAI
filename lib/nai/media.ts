@@ -1,9 +1,14 @@
 import { gunzipSync, unzlibSync } from "fflate";
-import { base64ToBytes } from "./protocol";
+import { base64ToBytes, bytesToBase64 } from "./protocol";
 
 export async function parseImage(blob: Blob) {
   const bitmap = await createImageBitmap(blob);
   try {
+    // Keep PNG pixels and metadata intact when merely uploading; canvas export discards both
+    // text chunks and alpha-channel metadata. Other formats still normalize to PNG below.
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if ([137,80,78,71,13,10,26,10].every((value, i) => bytes[i] === value))
+      return { base64: bytesToBase64(bytes), width: bitmap.width, height: bitmap.height };
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width; canvas.height = bitmap.height;
     const ctx = canvas.getContext("2d");

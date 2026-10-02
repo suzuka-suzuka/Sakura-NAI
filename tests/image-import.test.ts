@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { zlibSync } from "fflate";
 import { toast } from "sonner";
 import { useStore } from "../lib/store";
-import { prepareImageImport, applyImageImport, importRecipeFile } from "../lib/recipe-import";
+import { prepareImageImport, applyImageImport, importRecipeFile, DEFAULT_RECIPE_IMPORT } from "../lib/recipe-import";
 import { DEFAULT_SETTINGS } from "../lib/nai/types";
 import { Model } from "../lib/nai/protocol";
 import { V5_FULL, V5_CURATED } from "../lib/nai/models";
@@ -99,11 +99,13 @@ test("both reference purposes append to their own list and select 4.5 Full from 
     for (const purpose of ["vibe", "directorReference"] as const) {
       useStore.getState().patchSettings({ model, width: 832, height: 1216, vibe: [ref], directorReference: [ref] });
       const before = useStore.getState().settings;
-      await prepareImageImport(recipeFile());
+      const file = recipeFile();
+      const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+      await prepareImageImport(file);
       assert.equal(applyImageImport(purpose), true);
       const s = useStore.getState();
       assert.equal(s.settings.model, Model.V4_5);
-      assert.deepEqual(s.settings[purpose], [ref, { base64: "decoded", preview: "data:image/png;base64,decoded", strength: 0.6, informationExtracted: 1 }]);
+      assert.deepEqual(s.settings[purpose], [ref, { base64, preview: `data:image/png;base64,${base64}`, strength: 0.6, informationExtracted: 1 }]);
       assert.deepEqual(s.settings[purpose === "vibe" ? "directorReference" : "vibe"], [ref]);
       assert.equal(s.settings.prompt, before.prompt);
       assert.equal(s.settings.negativePrompt, before.negativePrompt);
@@ -184,7 +186,7 @@ test("busy state is checked after decoding and before applying a choice", async 
   assert.equal(useStore.getState().settings, before);
 });
 
-test("the existing generic file picker still imports directly without the drop dialog", async t => {
+test("the direct-import helper still applies recipes and base images without a dialog", async t => {
   decodeImages(t);
   assert.equal(await importRecipeFile(recipeFile()), true);
   assert.equal(useStore.getState().settings.prompt, "saved prompt");
@@ -194,4 +196,48 @@ test("the existing generic file picker still imports directly without the drop d
   assert.equal(useStore.getState().settings.prompt, "new draft");
   assert.equal(useStore.getState().settings.imageSource?.mode, "img2img");
   assert.equal(useStore.getState().imageImport, null);
+});
+
+test("selected metadata import preserves unchecked drafts, seed, sampling and image inputs", async t => {
+  decodeImages(t);
+  const source = { dataUrl: "original", width: 64, height: 64, mode: "img2img" as const, strength: 0.4, noise: 0.2, inpaintStrength: 1 };
+  useStore.getState().patchSettings({ imageSource: source, seed: 16, steps: 33, vibe: [ref] });
+  await prepareImageImport(recipeFile());
+  const options = { ...DEFAULT_RECIPE_IMPORT, negativePrompt: false, characters: false, settings: false, seed: false };
+  assert.equal(applyImageImport("recipe", options), true);
+  const s = useStore.getState().settings;
+  assert.equal(s.prompt, "saved prompt");
+  assert.equal(s.negativePrompt, "current negative");
+  assert.equal(s.seed, 16); assert.equal(s.steps, 33);
+  assert.deepEqual(s.imageSource, source); assert.deepEqual(s.vibe, [ref]);
+});
+
+test("append and clean imports have explicit behavior; selecting no fields changes nothing", async t => {
+  decodeImages(t);
+  await prepareImageImport(recipeFile());
+  const onlyPrompts = { ...DEFAULT_RECIPE_IMPORT, characters: false, settings: false, seed: false, append: true };
+  assert.equal(applyImageImport("recipe", onlyPrompts), true);
+  assert.equal(useStore.getState().settings.prompt, "current draft, saved prompt");
+  assert.equal(useStore.getState().settings.negativePrompt, "current negative, saved negative");
+  await prepareImageImport(recipeFile());
+  const previous = useStore.getState().settings;
+  assert.equal(applyImageImport("recipe", { ...onlyPrompts, prompt: false, negativePrompt: false, clean: true }), false);
+  assert.equal(useStore.getState().settings, previous);
+  assert.equal(applyImageImport("recipe", { ...onlyPrompts, append: false, clean: true }), true);
+  assert.equal(useStore.getState().settings.steps, DEFAULT_SETTINGS.steps);
+  assert.equal(useStore.getState().settings.prompt, "saved prompt");
+});
+
+test("drop and direct imports warn about missing inpainting inputs without inventing a base or mask", async t => {
+  decodeImages(t);
+  const warning = t.mock.method(toast, "warning", () => 0);
+  const file = png(JSON.stringify({ prompt: "repair seam", steps: 22, model: "nai-diffusion-4-5-full-inpainting", action: "infill", inpaintImg2ImgStrength: 0.6 }));
+  await prepareImageImport(file);
+  assert.deepEqual(useStore.getState().imageImport?.recipe?.reproductionWarnings, ["infill"]);
+  assert.equal(applyImageImport("recipe"), true);
+  assert.equal(useStore.getState().settings.imageSource, null);
+  assert.equal(useStore.getState().settings.model, Model.V4_5);
+  assert.match(String(warning.mock.calls[0].arguments[0]), /original base image and mask/);
+  assert.equal(await importRecipeFile(file), true);
+  assert.equal(warning.mock.calls.length, 2);
 });

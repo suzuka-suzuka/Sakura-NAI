@@ -13,6 +13,8 @@ import { useImageViewport } from "@/lib/use-image-viewport";
 import { resizeFrame, frameMask, type Frame, type FrameHandle } from "@/lib/editor-geometry";
 import { generationSize } from "@/lib/nai/models";
 import { useFocusTrap } from "@/lib/use-overlay";
+import { preserveCanvasMetadata } from "@/lib/nai/png-metadata";
+import { downloadDataUrl } from "@/lib/image-actions";
 
 type Tool = "brush" | "eraser" | "fill" | "rectangle" | "ellipse" | "line" | "picker" | "hand" | "frame";
 type Layer = { id: number; name: string; url: string; visible: boolean; opacity: number };
@@ -218,10 +220,24 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
         const input = document.createElement("canvas"); input.width = w; input.height = h;
         if (base) { const img = new Image(); img.src = base; await img.decode(); input.getContext("2d")!.drawImage(img, 0, 0, w, h); }
         const output = initial.hasInput && w === initial.dimensions.w && h === initial.dimensions.h ? initial.output : { width: w, height: h };
-        patch({ ...output, imageSource: { dataUrl: input.toDataURL("image/png"), width:w, height:h, mask:c.toDataURL("image/png"), mode:"infill", strength:settings.imageSource?.strength ?? 0.7, noise:0, inpaintStrength:settings.imageSource?.inpaintStrength ?? 1, focused: settings.imageSource?.focused ?? false } });
-      } else patch({ width:w,height:h,imageSource:{ dataUrl:c.toDataURL("image/png"),width:w,height:h,mode:"img2img",strength:settings.imageSource?.strength ?? 0.7,noise:settings.imageSource?.noise ?? 0,inpaintStrength:1 } });
+        const dataUrl = await preserveCanvasMetadata(input.toDataURL("image/png"), source, base !== source || w !== initial.dimensions.w || h !== initial.dimensions.h);
+        patch({ ...output, imageSource: { dataUrl, width:w, height:h, mask:c.toDataURL("image/png"), mode:"infill", strength:settings.imageSource?.strength ?? 0.7, noise:0, inpaintStrength:settings.imageSource?.inpaintStrength ?? 1, focused: settings.imageSource?.focused ?? false } });
+      } else {
+        const dataUrl = await preserveCanvasMetadata(c.toDataURL("image/png"), source);
+        patch({ width:w,height:h,imageSource:{ dataUrl,width:w,height:h,mode:"img2img",strength:settings.imageSource?.strength ?? 0.7,noise:settings.imageSource?.noise ?? 0,inpaintStrength:1 } });
+      }
       setUI({ imageEditor:null,settingsCollapsed:false });
     } catch (error) { toast.error(String(error)); }
+    finally { setBusy(false); }
+  };
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const c = await composite();
+      const url = c.toDataURL("image/png");
+      downloadDataUrl(mode === "draw" ? await preserveCanvasMetadata(url, source) : url, "canvas.png");
+    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
   const transform = (rotate: boolean) => {
@@ -239,7 +255,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
           <option value="round">{t("Round brush")}</option><option value="soft">{t("Soft round brush")}</option><option value="square">{t("Square brush")}</option>
         </select></label>
       </div>
-      <div className="flex items-center gap-1"><IconButton label={t("Download canvas")} onClick={()=>void composite().then(c=>{const a=document.createElement("a");a.href=c.toDataURL("image/png");a.download="canvas.png";a.click();})}><Download /></IconButton><Button disabled={busy} onClick={()=>void save()}>{t("Save and close")}</Button><IconButton label={t("Close editor")} onClick={()=>setUI({imageEditor:null})}><X /></IconButton></div>
+      <div className="flex items-center gap-1"><IconButton label={t("Download canvas")} disabled={busy} onClick={()=>void download()}><Download /></IconButton><Button disabled={busy} onClick={()=>void save()}>{t("Save and close")}</Button><IconButton label={t("Close editor")} onClick={()=>setUI({imageEditor:null})}><X /></IconButton></div>
     </header>
     {tool === "frame" && <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 px-3 pb-3 text-xs">
       <span>{t("Canvas size")}</span>

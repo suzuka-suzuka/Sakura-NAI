@@ -5,7 +5,49 @@ import { toast } from "sonner";
 import { useStore } from "./store";
 import { Model } from "./nai/protocol";
 import { generationSize } from "./nai/models";
-import type { ImportedRecipe } from "./nai/import-recipe";
+import { recipeReproductionMessage, type ImportedRecipe } from "./nai/import-recipe";
+import { DEFAULT_SETTINGS, type GenerationSettings } from "./nai/types";
+
+export type RecipeImportOptions = {
+  prompt: boolean; negativePrompt: boolean; characters: boolean; settings: boolean; seed: boolean;
+  append: boolean; clean: boolean;
+};
+export const DEFAULT_RECIPE_IMPORT: RecipeImportOptions = {
+  prompt: true, negativePrompt: true, characters: true, settings: true, seed: true, append: false, clean: false,
+};
+
+/** Build a complete snapshot while preserving unchecked fields and the existing Undo action. */
+export function selectedRecipeSettings(current: GenerationSettings, recipe: ImportedRecipe, options = DEFAULT_RECIPE_IMPORT): GenerationSettings {
+  const result = structuredClone(options.clean ? DEFAULT_SETTINGS : current);
+  const incoming = recipe.settings;
+  const selected = (options.prompt || options.negativePrompt || options.characters || options.settings || options.seed);
+  if (!selected) return structuredClone(current);
+  if (options.settings) {
+    const { prompt: _p, negativePrompt: _n, characters: _c, seed: _s, vibe: _v, directorReference: _r, imageSource: _i,
+      qualityToggle: _qt, qualityPreset: _qp, ucPreset: _uc, autoText: _at, ...sampling } = incoming;
+    Object.assign(result, sampling);
+    // A PNG has no input/reference pixels. Do not accidentally reuse an unrelated source.
+    result.vibe = []; result.directorReference = []; result.imageSource = null;
+  }
+  const join = (existing: string, value: string) => [existing, value].filter(Boolean).join(", ");
+  if (options.prompt) {
+    result.prompt = options.append ? join(result.prompt, incoming.prompt) : incoming.prompt;
+    result.qualityToggle = incoming.qualityToggle; result.qualityPreset = incoming.qualityPreset; result.autoText = incoming.autoText;
+  }
+  if (options.negativePrompt) {
+    result.negativePrompt = options.append ? join(result.negativePrompt, incoming.negativePrompt) : incoming.negativePrompt;
+    result.ucPreset = incoming.ucPreset;
+  }
+  if (options.characters) result.characters = [...(options.append ? result.characters : []), ...incoming.characters.map(c => ({ ...c, id: crypto.randomUUID() }))];
+  if (options.seed) result.seed = incoming.seed;
+  return result;
+}
+
+function warnRecipeLimitations(recipe: ImportedRecipe) {
+  const message = recipeReproductionMessage(recipe);
+  if (message) toast.warning(translateUI(message));
+  if (recipe.omittedReferences) toast.warning(translateUI("Reference strengths were found, but source reference images are not embedded in NovelAI PNGs."));
+}
 
 export type ImageImportPurpose = "recipe" | "img2img" | "vibe" | "directorReference";
 export type ImageImportCandidate = {
@@ -72,19 +114,18 @@ export async function prepareImageImport(file: File | null | undefined): Promise
 }
 
 /** Apply the selected purpose; references append to the chosen list and select V4.5 Full. */
-export function applyImageImport(purpose: ImageImportPurpose): boolean {
+export function applyImageImport(purpose: ImageImportPurpose, options = DEFAULT_RECIPE_IMPORT): boolean {
   const store = useStore.getState();
   const image = store.imageImport;
   if (!image || dropImportBlocked()) return false;
   if (purpose === "recipe") {
     if (!image.recipe) return false;
-    store.restoreSettings(image.recipe.settings, {
+    if (![options.prompt, options.negativePrompt, options.characters, options.settings, options.seed].some(Boolean)) return false;
+    store.restoreSettings(selectedRecipeSettings(store.settings, image.recipe, options), {
       message: translateUI("Imported {0} recipe fields from {1}", image.recipe.importedFields.length, image.filename),
       toastId: DROP_TOAST_ID,
     });
-    if (image.recipe.omittedReferences) {
-      toast.warning(translateUI("Reference strengths were found, but source reference images are not embedded in NovelAI PNGs."));
-    }
+    warnRecipeLimitations(image.recipe);
   } else if (purpose === "img2img") {
     store.patchSettings({ ...generationSize(image.width, image.height), imageSource: {
       dataUrl: image.preview, width: image.width, height: image.height,
@@ -114,8 +155,8 @@ export function applyImageImport(purpose: ImageImportPurpose): boolean {
 /**
  * Import a NovelAI PNG recipe into the composer.
  *
- * The generic file picker restores metadata or uses ordinary images as a base.
- * Drag-and-drop uses prepareImageImport instead so users can choose a purpose first.
+ * Explicit direct-import helper: restore metadata or use an ordinary image as a base.
+ * The generic picker and drag-and-drop use prepareImageImport to offer a choice first.
  *
  * Returns whether the recipe was applied, so callers can decide what to do with focus afterwards.
  */
@@ -167,11 +208,7 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
     // collapsed via `[`) the destination is off screen, so the import looks like it did nothing.
     setUI({ activeTab: "basic", settingsCollapsed: false });
 
-    if (recipe.omittedReferences) {
-      toast.warning(
-        translateUI("Reference strengths were found, but source reference images are not embedded in NovelAI PNGs."),
-      );
-    }
+    warnRecipeLimitations(recipe);
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : translateUI("The image could not be read.");
@@ -189,7 +226,7 @@ export function pickRecipeFile() {
   input.type = "file";
   input.accept = "image/*";
   input.addEventListener("change", () => {
-    void importRecipeFile(input.files?.[0]);
+    void prepareImageImport(input.files?.[0]);
   });
   input.click();
 }

@@ -5,6 +5,7 @@ import { queryAccount } from "./account";
 import { buildPayload } from "./payload";
 import { prepareInpainting } from "./image-input";
 import { prepareFocusedInpainting } from "./focused-inpainting";
+import { generationPngMetadata } from "./png-metadata";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "./types";
 import { isV4Model, isV5Model, supportsStreaming, type GenerationModel } from "./models";
 
@@ -170,7 +171,11 @@ export class NaiClient {
     try {
       await this.addReferences(settings, payload.parameters, controller.signal);
       for await (const event of this.transport.generate(payload, streaming, controller.signal)) {
-        yield compose ? { ...event, image: new Image(base64ToBytes((await compose(event.image.toDataURL())).split(",")[1])) } : event;
+        const output = compose ? base64ToBytes(await compose(event.image.toDataURL())) : event.image.data;
+        const bytes = event.event_type === EventType.FINAL
+          ? await generationPngMetadata(output, payload, event.samp_ix, event.image.data, settings.imageSource?.focused)
+          : output;
+        yield { ...event, image: new Image(bytes) };
       }
     } finally {
       controller.abort();
@@ -247,7 +252,8 @@ export class NaiClient {
     delete payload.parameters.stream;
     Object.assign(payload.parameters, { image: parsed.base64, strength: 0.2, noise: 0, extra_noise_seed: seed, add_original_image: false });
     await this.addReferences(effective, payload.parameters);
-    return this.transport.images("/ai/generate-image", payload);
+    const images = await this.transport.images("/ai/generate-image", payload);
+    return Promise.all(images.map(async (image, index) => new Image(await generationPngMetadata(image.data, payload, index))));
   }
 }
 export { EventType, parseImage };

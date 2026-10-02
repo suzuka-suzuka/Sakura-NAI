@@ -9,6 +9,8 @@ export type ImportedRecipe = {
   settings: GenerationSettings;
   importedFields: string[];
   omittedReferences: boolean;
+  reproductionWarnings: ("img2img" | "infill" | "edited")[];
+  imageSettings?: { mode: "img2img" | "infill"; strength: number; noise: number; inpaintStrength: number; focused: boolean };
 };
 
 async function readPngDimensions(file: Blob) {
@@ -82,7 +84,7 @@ function pick(bag: Map<string, unknown>, ...names: string[]) {
 }
 
 function readModel(value: unknown): GenerationModel | null {
-  const raw = text(value);
+  const raw = text(value)?.replace(/-inpainting$/i, "");
   if (!raw) return null;
   if (MODEL_VALUES.has(raw as GenerationModel)) return raw as GenerationModel;
 
@@ -164,17 +166,19 @@ export function recipeFromNovelAIMetadata(
   const v4NegativePrompt = record(pick(bag, "v4_negative_prompt"));
   const v4PromptCaption = record(v4Prompt?.caption);
   const v4NegativeCaption = record(v4NegativePrompt?.caption);
-  const prompt = text(pick(bag, "prompt", "description", "positivePrompt", "positive_prompt"))
+  const rawPrompt = pick(bag, "prompt", "description", "positivePrompt", "positive_prompt");
+  const prompt = text(rawPrompt)
     ?? text(v4PromptCaption?.base_caption);
-  if (prompt) {
-    settings.prompt = prompt;
+  if (prompt || rawPrompt === "") {
+    settings.prompt = prompt ?? "";
     imported.add("prompt");
   }
 
-  const negativePrompt = text(pick(bag, "uc", "negativePrompt", "negative_prompt"))
+  const rawNegative = pick(bag, "uc", "negativePrompt", "negative_prompt");
+  const negativePrompt = text(rawNegative)
     ?? text(v4NegativeCaption?.base_caption);
-  if (negativePrompt && negativePrompt.toLowerCase() !== "none") {
-    settings.negativePrompt = negativePrompt;
+  if (negativePrompt || rawNegative === "") {
+    settings.negativePrompt = negativePrompt?.toLowerCase() === "none" ? "" : negativePrompt ?? "";
     imported.add("undesired content");
   }
 
@@ -244,6 +248,7 @@ export function recipeFromNovelAIMetadata(
   if (qualityPreset === "standard" || qualityPreset === "light" || qualityPreset === "none") {
     settings.qualityPreset = qualityPreset;
     settings.qualityToggle = qualityPreset !== "none";
+    imported.add("quality tags");
   }
   const samples = number(pick(bag, "nSamples", "n_samples"));
   if (samples !== null) {
@@ -273,11 +278,13 @@ export function recipeFromNovelAIMetadata(
   if (coords !== null) settings.useCoords = coords;
   const transparent = boolean(pick(bag, "tag_hint_transparent_background", "transparentBackground"));
   if (transparent !== null) settings.transparentBackground = transparent;
+  const autoText = boolean(pick(bag, "autoText"));
+  if (autoText !== null) settings.autoText = autoText;
   // PNG captions already contain expanded quality/UC text. Avoid appending them again.
   if (quality === null && qualityPreset === null && prompt) settings.qualityToggle = false;
   if (ucPreset === null && negativePrompt) settings.ucPreset = 3;
   const characters = readCharacters(bag);
-  if (characters.length) {
+  if (characters.length || Array.isArray(pick(bag, "characterPrompts", "character_prompts")) || Array.isArray(v4PromptCaption?.char_captions)) {
     settings.characters = characters;
     imported.add(`${characters.length} character${characters.length === 1 ? "" : "s"}`);
   }
@@ -289,8 +296,34 @@ export function recipeFromNovelAIMetadata(
     pick(bag, "director_reference_strength_values"),
   ].some((value) => Array.isArray(value) && value.length > 0);
 
+  // Official exports may identify the request by name or only by its image-input parameters.
+  const request = String(pick(bag, "action", "request_type", "requestType") ?? "") + " " + String(pick(bag, "source", "model") ?? "");
+  const inpaintStrength = number(pick(bag, "inpaintImg2ImgStrength", "inpaint_strength"));
+  const strength = number(pick(bag, "strength"));
+  const infill = /infill|inpaint/i.test(request) || inpaintStrength !== null;
+  const img2img = !infill && (/img2img|image2image|image.to.image/i.test(request) || strength !== null);
+  const reproductionWarnings: ImportedRecipe["reproductionWarnings"] = [];
+  if (infill) reproductionWarnings.push("infill");
+  if (img2img) reproductionWarnings.push("img2img");
+  if (boolean(pick(bag, "sakura_canvas_edited"))) reproductionWarnings.push("edited");
+  const imageSettings: ImportedRecipe["imageSettings"] = infill || img2img ? {
+    mode: infill ? "infill" : "img2img", strength: clamp(strength ?? 0.7, 0, 1),
+    noise: clamp(number(pick(bag, "noise")) ?? 0, 0, 1),
+    inpaintStrength: clamp(inpaintStrength ?? 1, 0, 1), focused: boolean(pick(bag, "focused")) ?? false,
+  } : undefined;
+
   if (imported.size === 0) throw new Error("NovelAI metadata was found, but it contains no supported generation settings.");
-  return { settings, importedFields: [...imported], omittedReferences };
+  return { settings, importedFields: [...imported], omittedReferences, reproductionWarnings, imageSettings };
+}
+
+export function recipeReproductionMessage(recipe: ImportedRecipe): string | null {
+  if (recipe.reproductionWarnings.includes("infill"))
+    return "This image was generated using inpainting. You can import its parameters, but reproducing it also requires the original base image and mask.";
+  if (recipe.reproductionWarnings.includes("img2img"))
+    return "This image was generated using Image2Image. You can import its parameters, but reproducing it also requires the original base image.";
+  if (recipe.reproductionWarnings.includes("edited"))
+    return "This image was cropped or edited. Its generation parameters were kept, but those parameters alone cannot reproduce the edited image.";
+  return null;
 }
 
 /** Extract a generation recipe from NovelAI PNG text chunks or stealth metadata. */
