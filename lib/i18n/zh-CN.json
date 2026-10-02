@@ -574,7 +574,7 @@
   "Focused inpainting": "聚焦重绘",
   "Upscale the masked region for detail, then paste it back. The rest of the image stays intact.": "将蒙版附近放大生成细节，再贴回原图，保留蒙版外的内容。",
   "Reading image and generation metadata…": "正在读取图片和生成参数…",
-  "How would you like to use this image?": "这张图片要用来做什么？",
+  "Select image purpose": "选择图片用途",
   "Import image parameters": "导入图片参数",
   "Use as Image2Image base": "用作图生图底图",
   "Use for Vibe Transfer": "用作风格迁移",

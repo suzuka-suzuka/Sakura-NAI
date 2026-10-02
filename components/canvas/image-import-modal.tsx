@@ -21,7 +21,7 @@ export function ImageImportModal() {
     { purpose: "directorReference", title: t("Use as character reference"), icon: UserRound },
   ];
 
-  return <Modal open={!!image} onClose={close} title={t("How would you like to use this image?")} className="max-w-xl">
+  return <Modal open={!!image} onClose={close} title={t("Select image purpose")} className="max-w-xl">
     {image && <>
       <div className="mb-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-border-soft bg-surface-2 p-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
