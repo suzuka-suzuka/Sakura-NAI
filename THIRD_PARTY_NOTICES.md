@@ -23,7 +23,7 @@ Enhancement billing: https://github.com/Aaalice233/Aaalice_NAI_Launcher/blob/mai
 
 The canvas crop/expansion, focused inpainting workflow, Variety+ sigma scaling, and Opus small-image upscale discount were also checked against this project's implementation at commit c648ee60316e58a5ec45c539e28023f8a56c2db7. The browser canvas implementation is application-owned; its source references are lib/core/utils/inpaint_outpaint_utils.dart, lib/core/utils/focused_inpaint_utils.dart, lib/core/network/request_builders/nai_image_request_builder.dart, and lib/core/services/anlas_calculator.dart.
 
-The application-owned inpainting mask preparation and result compositor also refer to the public request-mask workflow in lib/core/utils/inpaint_mask/inpaint_mask_operations.dart (8px latent-grid sampling, opaque black/white full-size request masks, and client-side result composition). The regular workflow uses the same binary request mask for composition; it does not reproduce that project's dilated soft composite mask.
+The application-owned inpainting mask preparation and result compositor also refer to lib/core/utils/inpaint_mask/inpaint_mask_operations.dart: coverage-preserving editor masks, 8px latent-grid sampling with a strict coverage threshold of 155, opaque black/white HTTP masks, and a separate soft composite mask. Ordinary and focused inpainting use four latent dilation passes followed by two radius-20 box-blur passes, then blend replacement pixels in premultiplied RGBA. Selected transparent canvas pixels retain full coverage for outpainting. These processing parameters were also checked against the public NovelAI client build 7207c1c-production on 2026-10-02; no official client source is bundled in the application.
 
 MIT License
 

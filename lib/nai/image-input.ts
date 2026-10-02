@@ -1,7 +1,7 @@
 import type { GenerationPayload } from "./protocol";
 import type { GenerationSettings } from "./types";
 import { isV5Model } from "./models";
-import { compositeInpainting, requestInpaintingMask } from "./inpainting-composite";
+import { compositeInpainting, prepareInpaintingMasks } from "./inpainting-composite";
 
 const imageBytes = (url: string) => url.replace(/^data:image\/[^;]+;base64,/, "");
 
@@ -34,35 +34,27 @@ export function applyImageInput(payload: GenerationPayload, s: GenerationSetting
   return payload;
 }
 
-/** Resize the image and binary mask together to the chosen generation canvas. */
+/** Resize image and mask coverage together; retain grayscale until request preparation. */
 export async function prepareImageInput(s: GenerationSettings, signal?: AbortSignal): Promise<GenerationSettings> {
   signal?.throwIfAborted();
   const source = s.imageSource;
   if (source?.mode !== "infill" || (source.width === s.width && source.height === s.height)) return s;
-  const resize = async (url: string, mask: boolean) => {
+  const resize = async (url: string) => {
     const image = new Image(); image.src = url; await image.decode();
     signal?.throwIfAborted();
     const canvas = document.createElement("canvas"); canvas.width = s.width; canvas.height = s.height;
     const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Unable to prepare inpainting image");
-    ctx.imageSmoothingEnabled = !mask;
+    ctx.imageSmoothingEnabled = true;
     ctx.drawImage(image, 0, 0, s.width, s.height);
-    if (mask) {
-      const pixels = ctx.getImageData(0, 0, s.width, s.height);
-      for (let i = 0; i < pixels.data.length; i += 4) {
-        const value = pixels.data[i] > 127 ? 255 : 0;
-        pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value; pixels.data[i + 3] = 255;
-      }
-      ctx.putImageData(pixels, 0, 0);
-    }
     return canvas.toDataURL("image/png");
   };
   if (!source.mask) throw new Error("Draw an inpainting mask first");
-  const [dataUrl, mask] = await Promise.all([resize(source.dataUrl, false), resize(source.mask, true)]);
+  const [dataUrl, mask] = await Promise.all([resize(source.dataUrl), resize(source.mask)]);
   signal?.throwIfAborted();
   return { ...s, imageSource: { ...source, dataUrl, mask, width: s.width, height: s.height } };
 }
 
-/** Infill returns a generated canvas; restore the untouched source before displaying or saving it. */
+/** Infill returns a generated canvas; blend its patch and preserve pixels beyond the soft mask. */
 export async function prepareInpainting(s: GenerationSettings, signal?: AbortSignal) {
   const settings = await prepareImageInput(s, signal), source = settings.imageSource;
   if (source?.mode !== "infill") return { settings };
@@ -81,18 +73,21 @@ export async function prepareInpainting(s: GenerationSettings, signal?: AbortSig
     throw new Error("Inpainting image and mask dimensions must match the generation canvas");
   const mask = canvas(); mask.ctx.drawImage(maskImage, 0, 0);
   const maskPixels = mask.ctx.getImageData(0, 0, settings.width, settings.height);
-  const requestPixels = mask.ctx.createImageData(settings.width, settings.height);
-  requestPixels.data.set(requestInpaintingMask(maskPixels.data, settings.width, settings.height));
-  mask.ctx.putImageData(requestPixels, 0, 0);
   const result = canvas(); result.ctx.drawImage(original, 0, 0);
   const base = result.ctx.getImageData(0, 0, settings.width, settings.height);
+  const masks = prepareInpaintingMasks(maskPixels.data, settings.width, settings.height, base.data);
+  const requestPixels = mask.ctx.createImageData(settings.width, settings.height);
+  requestPixels.data.set(masks.requestMask);
+  mask.ctx.putImageData(requestPixels, 0, 0);
+  const blend = canvas(), blendPixels = blend.ctx.createImageData(settings.width, settings.height);
+  blendPixels.data.set(masks.compositeMask); blend.ctx.putImageData(blendPixels, 0, 0);
   const compose = async (url: string) => {
     const image = await decode(url);
     const patch = canvas(); patch.ctx.drawImage(image, 0, 0, settings.width, settings.height);
     const pixels = patch.ctx.getImageData(0, 0, settings.width, settings.height);
-    pixels.data.set(compositeInpainting(base.data, pixels.data, requestPixels.data));
+    pixels.data.set(compositeInpainting(base.data, pixels.data, masks.compositeMask));
     patch.ctx.putImageData(pixels, 0, 0);
     return patch.c.toDataURL("image/png");
   };
-  return { settings: { ...settings, imageSource: { ...source, mask: mask.c.toDataURL("image/png") } }, compose };
+  return { settings: { ...settings, imageSource: { ...source, mask: mask.c.toDataURL("image/png") } }, compose, compositeMask: blend.c };
 }

@@ -33,7 +33,9 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
   useLocale();
   const settings = useStore(s => s.settings), patch = useStore(s => s.patchSettings), setUI = useStore(s => s.setUI);
   const [layers, setLayers] = useState<Layer[]>([{ id: 1, name: t(mode === "mask" ? "Mask" : "Layer") + " 1", url: "", visible: true, opacity: 1 }]);
-  const [active, setActive] = useState(1), [tool, setTool] = useState<Tool>("brush"), [size, setSize] = useState(20), [color, setColor] = useState("#222222"), [square, setSquare] = useState(false);
+  const [active, setActive] = useState(1), [tool, setTool] = useState<Tool>("brush"), [size, setSize] = useState(20), [color, setColor] = useState("#222222");
+  const [brushShape, setBrushShape] = useState<"round" | "soft" | "square">("round");
+  const square = brushShape === "square";
   const [initial] = useState(() => {
     const input = source && settings.imageSource?.dataUrl === source ? settings.imageSource : null;
     const size = input ? generationSize(input.width, input.height) : { width: settings.width, height: settings.height };
@@ -48,7 +50,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
   const ready = useRef(false);
   const panel = useFocusTrap<HTMLDivElement>(true);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const gesture = useRef<{ x: number; y: number; before: ImageData } | null>(null), nextId = useRef(2), file = useRef<HTMLInputElement>(null);
+  const gesture = useRef<{ x: number; y: number; before: ImageData; stroke?: HTMLCanvasElement } | null>(null), nextId = useRef(2), file = useRef<HTMLInputElement>(null);
   const { w, h } = dimensions;
   const { container: viewportContainer, zoom: viewportZoom, fit: viewportFit, scale: viewportScale, panning: viewportPanning, startPan: viewportStartPan, movePan: viewportMovePan, endPan: viewportEndPan, changeZoom: viewportChangeZoom, reset: viewportReset, style: viewportStyle } = useImageViewport(w, h);
   // Size is measured on screen; compensate the stroke and cursor together so
@@ -103,7 +105,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
     const img = new Image(); img.onload = () => {
       if (cancelled) return;
       const c = document.createElement("canvas"); c.width = w; c.height = h; const ctx = c.getContext("2d")!; ctx.drawImage(img, 0, 0, w, h);
-      const data = ctx.getImageData(0, 0, w, h); for (let i = 0; i < data.data.length; i += 4) { data.data[i + 3] = data.data[i] > 127 ? 255 : 0; data.data[i] = 255; data.data[i + 1] = 70; data.data[i + 2] = 160; } ctx.putImageData(data, 0, 0);
+      const data = ctx.getImageData(0, 0, w, h); for (let i = 0; i < data.data.length; i += 4) { data.data[i + 3] = Math.round(data.data[i] * data.data[i + 3] / 255); data.data[i] = 255; data.data[i + 1] = 70; data.data[i + 2] = 160; } ctx.putImageData(data, 0, 0);
       setLayers([{ id: 1, name: t("Mask"), url: c.toDataURL("image/png"), visible: true, opacity: 1 }]);
     }; img.src = settings.imageSource.mask;
     return () => { cancelled = true; };
@@ -118,6 +120,14 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
   const redo = () => { if (!future.length || busy || gesture.current) return; setHistory(h => [...h, snapshot()]); restore(future[0]); setFuture(future.slice(1)); };
   const point = (e: React.PointerEvent<HTMLCanvasElement>) => { const r = e.currentTarget.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * w, y: (e.clientY - r.top) / r.height * h }; };
   const style = (ctx: CanvasRenderingContext2D) => { ctx.lineWidth = brushSize; ctx.lineCap = square ? "square" : "round"; ctx.lineJoin = "round"; ctx.strokeStyle = ctx.fillStyle = mode === "mask" ? "#ff46a0" : color; ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over"; };
+  const renderStroke = (ctx: CanvasRenderingContext2D, g: NonNullable<typeof gesture.current>) => {
+    const stroke = g.stroke!, strokeCtx = stroke.getContext("2d")!;
+    strokeCtx.clearRect(0, 0, w, h); strokeCtx.stroke();
+    // Composite the whole stroke once; repeated pointer events must not harden its soft edge.
+    ctx.putImageData(g.before, 0, 0); ctx.save();
+    ctx.filter = brushShape === "soft" ? `blur(${brushSize * 0.15}px)` : "none";
+    ctx.drawImage(stroke, 0, 0); ctx.restore();
+  };
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button === 1 || (e.button === 0 && (tool === "hand" || space))) { e.preventDefault(); viewportStartPan(e); setCursor(null); return; }
     if (e.button !== 0 || busy || tool === "frame" || !ready.current || !current.visible) return;
@@ -126,14 +136,23 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
     checkpoint(); style(ctx);
     if (tool === "fill") { const data = ctx.getImageData(0, 0, w, h); const hex = mode === "mask" ? "#ff46a0" : color; floodFill(data.data, w, h, p.x, p.y, [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16),255]); ctx.putImageData(data,0,0); commit(); return; }
     gesture.current = { ...p, before: ctx.getImageData(0,0,w,h) }; ctx.beginPath(); ctx.moveTo(p.x,p.y);
-    if (tool === "brush" || tool === "eraser") { ctx.lineTo(p.x + 0.01,p.y); ctx.stroke(); }
+    if (tool === "brush" || tool === "eraser") {
+      const stroke = document.createElement("canvas"); stroke.width = w; stroke.height = h;
+      const strokeCtx = stroke.getContext("2d")!; style(strokeCtx); strokeCtx.globalCompositeOperation = "source-over";
+      strokeCtx.beginPath(); strokeCtx.moveTo(p.x, p.y); strokeCtx.lineTo(p.x + 0.01, p.y);
+      gesture.current.stroke = stroke; renderStroke(ctx, gesture.current);
+    }
   };
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (viewportMovePan(e)) { setCursor(null); return; }
     const position = point(e); setCursor(position);
     if (!gesture.current) return;
     const ctx = e.currentTarget.getContext("2d")!, p = point(e), g = gesture.current; style(ctx);
-    if (tool === "brush" || tool === "eraser") { ctx.lineTo(p.x,p.y); ctx.stroke(); return; }
+    if (g.stroke) {
+      if (p.x === g.x && p.y === g.y) return;
+      g.stroke.getContext("2d")!.lineTo(p.x,p.y); g.x = p.x; g.y = p.y;
+      renderStroke(ctx, g); return;
+    }
     ctx.putImageData(g.before,0,0); ctx.beginPath();
     if (tool === "line") { ctx.moveTo(g.x,g.y); ctx.lineTo(p.x,p.y); }
     if (tool === "rectangle") ctx.rect(g.x,g.y,p.x-g.x,p.y-g.y);
@@ -216,7 +235,9 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
         <span className="text-xs font-semibold">{t(mode === "mask" ? "Draw mask" : "Draw")}</span>
         {mode === "draw" && <input type="color" aria-label={t("Brush color")} value={color} onChange={e=>setColor(e.target.value)} className="h-8 w-12 bg-transparent" />}
         <label className="text-xs">{t("Pen size")} <input type="number" min={1} max={300} value={size} onChange={e=>setSize(Math.max(1,Math.min(300,Number(e.target.value))))} className="w-12 bg-bg px-1" /><input type="range" min={1} max={300} value={size} onChange={e=>setSize(Number(e.target.value))} aria-label={t("Pen size")} className="mt-2 block w-32 accent-accent" /></label>
-        <label className="text-xs"><input type="checkbox" checked={square} onChange={e=>setSquare(e.target.checked)} className="mr-1 accent-accent" />{t("Square brush")}</label>
+        <label className="text-xs">{t("Brush shape")} <select aria-label={t("Brush shape")} value={brushShape} onChange={e=>setBrushShape(e.target.value as typeof brushShape)} className="ml-1 rounded border border-border-soft bg-bg px-1 py-1">
+          <option value="round">{t("Round brush")}</option><option value="soft">{t("Soft round brush")}</option><option value="square">{t("Square brush")}</option>
+        </select></label>
       </div>
       <div className="flex items-center gap-1"><IconButton label={t("Download canvas")} onClick={()=>void composite().then(c=>{const a=document.createElement("a");a.href=c.toDataURL("image/png");a.download="canvas.png";a.click();})}><Download /></IconButton><Button disabled={busy} onClick={()=>void save()}>{t("Save and close")}</Button><IconButton label={t("Close editor")} onClick={()=>setUI({imageEditor:null})}><X /></IconButton></div>
     </header>

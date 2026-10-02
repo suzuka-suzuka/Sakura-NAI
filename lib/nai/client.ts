@@ -151,13 +151,13 @@ export class NaiClient {
     this.activeController = controller;
     try {
       const focused = await prepareFocusedInpainting(settings, controller.signal);
-      const inpainting = await prepareInpainting(focused?.settings ?? settings, controller.signal);
+      const inpainting = focused ?? await prepareInpainting(settings, controller.signal);
       const prepared = inpainting.settings;
       controller.signal.throwIfAborted();
       const payload = buildPayload(prepared, seed);
       const streaming = preview && supportsStreaming(settings.model);
       if (!streaming) delete payload.parameters.stream;
-      const events = this.generationEvents(settings, payload, streaming, controller, focused?.compose ?? inpainting.compose);
+      const events = this.generationEvents(settings, payload, streaming, controller, inpainting.compose);
       return { seed, streaming, events };
     } catch (error) {
       controller.abort();

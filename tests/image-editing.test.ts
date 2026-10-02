@@ -221,12 +221,12 @@ test("Furry mode adds exactly one dataset prefix, leaving the saved prompt untou
   assert.match(buildPayload(s,1).input,/^fur dataset, fox/); assert.equal(s.prompt,"fox");
   assert.equal(buildPayload({...s,prompt:"fur dataset, fox"},1).input,buildPayload(s,1).input);
 });
-test("flood fill stays inside a contiguous color region and mask export is opaque black/white", () => {
+test("flood fill stays contiguous and mask export preserves brush coverage on opaque black", () => {
   const pixels=new Uint8ClampedArray([0,0,0,0, 255,0,0,255, 0,0,0,0, 0,0,0,0, 255,0,0,255, 0,0,0,0]);
   floodFill(pixels,3,2,0,0,[0,255,0,255]);
   assert.deepEqual([...pixels.slice(0,4)],[0,255,0,255]);assert.deepEqual([...pixels.slice(12,16)],[0,255,0,255]);
   assert.equal(pixels[11],0); assert.equal(pixels[23],0);
-  assert.deepEqual([...opaqueMask(new Uint8ClampedArray([3,4,5,0, 3,4,5,20]))],[0,0,0,255,255,255,255,255]);
+  assert.deepEqual([...opaqueMask(new Uint8ClampedArray([3,4,5,0, 3,4,5,20]))],[0,0,0,255,20,20,20,255]);
 });
 test("draft persistence excludes large base images and masks", t => {
   let saved="";

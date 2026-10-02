@@ -32,7 +32,8 @@ export function frameMask(data: Uint8ClampedArray, sourceWidth: number, sourceHe
     const sx = x + frame.x, sy = y + frame.y, i = (y * frame.width + x) * 4;
     const outside = sx < 0 || sy < 0 || sx >= sourceWidth || sy >= sourceHeight;
     if (outside || data[(sy * sourceWidth + sx) * 4 + 3] > 0) {
-      result[i] = 255; result[i + 1] = 70; result[i + 2] = 160; result[i + 3] = 255;
+      result[i] = 255; result[i + 1] = 70; result[i + 2] = 160;
+      result[i + 3] = outside ? 255 : data[(sy * sourceWidth + sx) * 4 + 3];
     }
   }
   return result;

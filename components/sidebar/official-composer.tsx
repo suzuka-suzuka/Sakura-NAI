@@ -136,7 +136,7 @@ export function ImageInputPanel() {
         {source.mode === "img2img" && <NumericSlider label={t("Noise")} min={0} max={1} step={0.01} value={source.noise} onChange={noise => patch({ imageSource: { ...source, noise } })} />}
         {source.mode === "infill" && <button className="flex items-center gap-2 text-xs text-fg-2" onClick={() => setUI({ imageEditor: { mode: "mask", source: source.dataUrl } })}><Eraser className="size-3" />{t("Edit mask")}</button>}
         {source.mode === "infill" && <label className="block text-xs"><input type="checkbox" className="mr-2 accent-accent" checked={source.focused ?? false} onChange={e=>patch({ imageSource:{...source,focused:e.target.checked},...(e.target.checked?{width:1024,height:1024}:{}) })} />{t("Focused inpainting")}
-          {source.focused && <span className="mt-1 block text-muted">{t("Upscale the masked region for detail, then paste it back. The rest of the image stays intact.")}</span>}</label>}
+          {source.focused && <span className="mt-1 block text-muted">{t("Upscale the masked region for detail, then blend it back. Pixels beyond the softened edge stay intact.")}</span>}</label>}
       </div>}
     </div>
     {!isV5Model(s.model) && <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details>}

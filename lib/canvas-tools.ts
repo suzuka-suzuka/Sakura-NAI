@@ -16,9 +16,9 @@ export function floodFill(data: Uint8ClampedArray, width: number, height: number
   }
 }
 
-/** The API expects white redraw pixels on an opaque black background. */
+/** Save brush coverage as opaque grayscale; binarize only when preparing the API request. */
 export function opaqueMask(data: Uint8ClampedArray) {
   const result = new Uint8ClampedArray(data.length);
-  for (let i = 0; i < data.length; i += 4) { const value = data[i + 3] ? 255 : 0; result[i] = result[i + 1] = result[i + 2] = value; result[i + 3] = 255; }
+  for (let i = 0; i < data.length; i += 4) { const value = data[i + 3]; result[i] = result[i + 1] = result[i + 2] = value; result[i + 3] = 255; }
   return result;
 }
