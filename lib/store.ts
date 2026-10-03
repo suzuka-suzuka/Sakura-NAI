@@ -4,7 +4,7 @@ import { translateUI } from "@/lib/i18n";
 import { pixelSnap } from "@/lib/pixel-snap";
 import { base64ToBytes, Image as NaiImage } from "@/lib/nai/protocol";
 import { buildPayload } from "@/lib/nai/payload";
-import { DEFAULT_PREFERENCES, loadGenerationPreferences, saveGenerationPreferences, estimateCost, type AccountInfo, type GenerationPreferences } from "@/lib/nai/cost";
+import { DEFAULT_PREFERENCES, loadGenerationPreferences, saveGenerationPreferences, estimateCost, augmentCost, upscaleCost, type AccountInfo, type GenerationPreferences } from "@/lib/nai/cost";
 import { create } from "zustand";
 import { AccountQueryError } from "@/lib/nai/account";
 import { toast } from "sonner";
@@ -162,6 +162,14 @@ type Store = {
 };
 
 let accountRequest: { client: NaiClient; promise: Promise<void> } | null = null;
+
+function checkAnlasBalance(cost: number, account: AccountInfo | null): boolean {
+  const balance = account?.anlas;
+  // Missing or malformed balances are unknown; only a known shortage should block a request.
+  if (cost <= 0 || balance == null || !Number.isFinite(balance) || balance >= cost) return true;
+  toast.error(translateUI("Insufficient points: this operation needs {0} points, but only {1} remain.", cost, balance));
+  return false;
+}
 
 export const useStore = create<Store>()((set, get) => ({
   // ---- connection ----
@@ -490,6 +498,7 @@ export const useStore = create<Store>()((set, get) => ({
       const estimate = estimateCost(settings, get().account, client.uncachedVibes(settings));
       if (!estimate.valid) throw new Error(translateUI("This resolution and step count exceed the per-image cost limit. Reduce either setting."));
       const cost = estimate.total;
+      if (!checkAnlasBalance(cost, get().account)) return;
       if (get().preferences.confirmPaid && cost > 0 &&
           ((!get().paidAcknowledged && approved === undefined) || (approved !== undefined && cost > approved.cost))) {
         set({ pendingPayment: { settings: structuredClone(settings), cost, client } });
@@ -665,6 +674,19 @@ export const useStore = create<Store>()((set, get) => ({
     }
     set({ isDirectorProcessing: true, directorKind: kind, lastError: null });
     try {
+      if (kind !== "pixelSnap") {
+        await get().refreshAccount();
+        if (get().client !== client || get().connectionStatus === "invalid") return;
+        const { width, height } = selectedImage.settings;
+        const account = get().account;
+        const enhanced: GenerationSettings = { ...selectedImage.settings, nSamples: 1,
+          imageSource: { dataUrl: selectedImage.dataUrl, width, height, mode: "img2img", strength: 0.2, noise: 0, inpaintStrength: 1 } };
+        const cost = kind === "upscale" ? upscaleCost(width, height, account)
+          : kind === "enhance" ? estimateCost(enhanced, account, client!.uncachedVibes(enhanced)).total
+          : augmentCost(width, height, kind === "backgroundRemoval", account);
+        if (cost === null) throw new Error("Upscale input must not exceed 3,145,728 pixels");
+        if (!checkAnlasBalance(cost, account)) return;
+      }
       const blob = await (await fetch(selectedImage.dataUrl)).blob();
       let results: Image[];
       switch (kind) {

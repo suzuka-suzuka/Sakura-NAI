@@ -392,6 +392,7 @@
   "Negative tags": "负面词",
   "{0} points": "{0} 点",
   "Over cost limit": "超出计费上限",
+  "Insufficient points: this operation needs {0} points, but only {1} remain.": "点数不足：本次需要 {0} 点，当前剩余 {1} 点。",
   "This resolution and step count exceed the per-image cost limit. Reduce either setting.": "当前尺寸和步数超过单张图片的计费上限，请降低尺寸或步数。",
   "Furry Focus": "兽人优先",
   "No preset tags are added.": "不追加预设提示词。",

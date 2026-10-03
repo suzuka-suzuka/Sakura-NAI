@@ -1,6 +1,7 @@
 import test, { beforeEach, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { IDBFactory } from "fake-indexeddb";
+import { toast } from "sonner";
 import { useStore } from "../lib/store";
 import { NaiClient, loadUIPrefs } from "../lib/nai/client";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "../lib/nai/types";
@@ -272,6 +273,114 @@ test("first paid request waits; cancelling never dispatches; one approval lasts 
   await useStore.getState().generate();
   assert.equal(generate.mock.callCount(), 2);
   assert.ok(useStore.getState().pendingPayment);
+});
+test("a refreshed point shortage blocks before confirmation and preserves the draft and previous image", async t => {
+  const { client, generate } = setup(t, { steps: 29 });
+  const error = t.mock.method(toast, "error", () => "toast-id");
+  t.mock.method(client, "account", async () => ({ ...opus, anlas: 10 }));
+  useStore.setState({ selectedImage: oldImage, selectedBatch: [oldImage], images: [oldImage] });
+  const draft = useStore.getState().settings;
+  await useStore.getState().generate();
+  assert.equal(generate.mock.callCount(), 0);
+  assert.equal(useStore.getState().pendingPayment, null);
+  assert.equal(useStore.getState().paidAcknowledged, false);
+  assert.equal(useStore.getState().isPreparing, false);
+  assert.equal(useStore.getState().isGenerating, false);
+  assert.equal(useStore.getState().settings, draft);
+  assert.equal(useStore.getState().selectedImage, oldImage);
+  assert.deepEqual(useStore.getState().images, [oldImage]);
+  assert.equal(error.mock.calls[0].arguments[0], "Insufficient points: this operation needs 30 points, but only 10 remain.");
+});
+test("disabling the paid reminder or acknowledging it never bypasses a point shortage", async t => {
+  for (const [confirmPaid, paidAcknowledged] of [[false, false], [true, true]]) {
+    const { client, generate } = setup(t, { steps: 29 });
+    t.mock.method(client, "account", async () => ({ ...opus, anlas: 0 }));
+    useStore.setState({ preferences: { streamPreview: true, confirmPaid }, paidAcknowledged });
+    await useStore.getState().generate();
+    assert.equal(generate.mock.callCount(), 0);
+    assert.equal(useStore.getState().pendingPayment, null);
+  }
+});
+test("confirming payment refreshes the balance and rejects a newly insufficient account", async t => {
+  const { client, generate } = setup(t, { steps: 29 });
+  await useStore.getState().generate();
+  assert.equal(useStore.getState().pendingPayment?.cost, 30);
+  t.mock.method(client, "account", async () => ({ ...opus, anlas: 29 }));
+  await useStore.getState().confirmPayment();
+  assert.equal(generate.mock.callCount(), 0);
+  assert.equal(useStore.getState().pendingPayment, null);
+  assert.equal(useStore.getState().isPreparing, false);
+});
+test("exhausted V5 allowance is repriced and blocked when the refreshed points cannot cover it", async t => {
+  const { client, generate } = setup(t);
+  t.mock.method(client, "account", async () => ({ ...opus, anlas: 10, usage: { percent: 0, isNegative: true } }));
+  await useStore.getState().generate();
+  assert.equal(generate.mock.callCount(), 0);
+  assert.equal(useStore.getState().pendingPayment, null);
+});
+test("a batch with reference encoding checks the entire cost before any paid API call", async t => {
+  const requests: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string | URL | Request) => {
+    requests.push(String(url));
+    assert.equal(String(url), `${cfg.host}/user/subscription`);
+    return Response.json({ tier: 3, active: true, trainingStepsLeft: { fixedTrainingStepsLeft: 20, purchasedTrainingSteps: 0 } });
+  });
+  useStore.setState({ client: new NaiClient(cfg), connection: cfg, account: opus,
+    settings: settings({ model: Model.V4_5, nSamples: 2, vibe: [{ base64: "reference", preview: "data:image/png;base64,reference", informationExtracted: 1, strength: 0.6 }] }) });
+  await useStore.getState().generate();
+  assert.deepEqual(requests, [`${cfg.host}/user/subscription`]);
+  assert.equal(useStore.getState().pendingPayment, null);
+});
+test("a point shortage blocks Max enhancement using its effective cost and keeps its edits", async t => {
+  const { client, generate } = setup(t, { steps: 23 });
+  t.mock.method(client, "account", async () => ({ ...opus, anlas: 15 }));
+  useStore.getState().beginEnhancement(oldImage);
+  useStore.getState().patchEnhancement({ factor: "max", magnitude: 1 });
+  const enhancement = useStore.getState().enhancement;
+  await useStore.getState().generate();
+  assert.equal(generate.mock.callCount(), 0);
+  assert.equal(useStore.getState().pendingPayment, null);
+  assert.equal(useStore.getState().enhancement, enhancement);
+});
+test("zero-point generation works with no points and an exact paid balance is sufficient", async t => {
+  for (const [steps, anlas] of [[28, 0], [29, 30]]) {
+    const { client, generate } = setup(t, { steps });
+    t.mock.method(client, "account", async () => ({ ...opus, anlas }));
+    useStore.getState().patchPreferences({ confirmPaid: false });
+    await useStore.getState().generate();
+    assert.equal(generate.mock.callCount(), 1);
+  }
+});
+test("a missing balance keeps the existing paid confirmation instead of claiming insufficient points", async t => {
+  const { client, generate } = setup(t, { steps: 29 });
+  t.mock.method(client, "account", async () => ({ ...opus, anlas: null }));
+  await useStore.getState().generate();
+  assert.equal(generate.mock.callCount(), 0);
+  assert.equal(useStore.getState().pendingPayment?.cost, 30);
+});
+test("paid director tools refresh points and reject shortages before loading or submitting the image", async t => {
+  for (const kind of ["backgroundRemoval", "lineArt", "upscale", "enhance"] as const) {
+    const { client } = setup(t);
+    const selected = { ...oldImage, settings: settings({ width: 1536, height: 1536, steps: 29 }) };
+    t.mock.method(client, "account", async () => ({ ...opus, anlas: 0 }));
+    const fetchImage = t.mock.method(globalThis, "fetch", async () => { throw new Error("Image must not be loaded"); });
+    const error = t.mock.method(toast, "error", () => "toast-id");
+    await useStore.getState().runDirector(kind, { source: selected });
+    assert.equal(fetchImage.mock.callCount(), 0);
+    assert.equal(useStore.getState().isDirectorProcessing, false);
+    assert.equal(useStore.getState().directorKind, null);
+    assert.match(String(error.mock.calls[0].arguments[0]), /^Insufficient points:/);
+    fetchImage.mock.restore();
+    error.mock.restore();
+  }
+});
+test("switching connections during a director balance refresh never submits to the old client", async t => {
+  const { client } = setup(t);
+  t.mock.method(client, "account", async () => { useStore.setState({ client: new NaiClient(cfg) }); return opus; });
+  const fetchImage = t.mock.method(globalThis, "fetch", async () => { throw new Error("Image must not be loaded"); });
+  await useStore.getState().runDirector("lineArt", { source: oldImage });
+  assert.equal(fetchImage.mock.callCount(), 0);
+  assert.equal(useStore.getState().isDirectorProcessing, false);
 });
 test("reminder can be disabled; price changes after confirmation require a fresh confirmation", async t => {
   const { client, generate } = setup(t, { nSamples: 2 });
