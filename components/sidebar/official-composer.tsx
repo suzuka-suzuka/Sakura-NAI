@@ -3,12 +3,11 @@
 
 import { useId, useRef, useState } from "react";
 import { ArrowLeftRight, Expand, Pencil, Upload, Trash2, RectangleHorizontal, RectangleVertical, Square, ImagePlus, Eraser, PanelTopClose, PanelTopOpen } from "lucide-react";
-import { toast } from "sonner";
 import { useStore } from "@/lib/store";
 import { translateUI as t, useLocale } from "@/lib/i18n";
-import { MODEL_OPTIONS, modelLabel, isV5Model, isV4Model, SIZE_TIERS, presetDims, tierAspectForSize, maxSamples, generationSize } from "@/lib/nai/models";
+import { MODEL_OPTIONS, modelLabel, isV5Model, isV4Model, SIZE_TIERS, presetDims, tierAspectForSize, maxSamples } from "@/lib/nai/models";
 import { QUALITY_PRESETS, NEGATIVE_PRESETS, qualityPreset, type NegativePreset, type QualityPreset } from "@/lib/nai/presets";
-import { parseImage } from "@/lib/nai/media";
+import { prepareImageImport } from "@/lib/recipe-import";
 import { TagTextarea } from "./tag-textarea";
 import { PresetSelect } from "./preset-select";
 import { CharactersTab } from "./characters-tab";
@@ -109,10 +108,8 @@ export function ImageInputPanel() {
     if (!file) return;
     setBusy(true);
     try {
-      const parsed = await parseImage(file);
-      patch({ imageSource: { dataUrl: `data:image/png;base64,${parsed.base64}`, width: parsed.width, height: parsed.height, mode: "img2img", strength: 0.7, noise: 0, inpaintStrength: 1 }, ...generationSize(parsed.width, parsed.height) });
-    } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
-    finally { setBusy(false); if (input.current) input.current.value = ""; }
+      await prepareImageImport(file);
+    } finally { setBusy(false); if (input.current) input.current.value = ""; }
   };
   return <section className="space-y-3 px-3 py-4">
     <h3 className="text-[12px] text-muted">{t("Reference images")}</h3>
