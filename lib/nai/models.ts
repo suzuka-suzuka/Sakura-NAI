@@ -1,5 +1,6 @@
 // UI options backed by the application-owned NovelAI wire constants.
 import { Model, Sampler, Noise, Resolution, EmotionOptions, RESOLUTION_DIMENSIONS } from "./protocol";
+import { MAX_GENERATION_DIMENSION, MAX_GENERATION_PIXELS } from "./dimensions";
 
 type Option<T extends string> = { value: T; label: string };
 
@@ -39,11 +40,11 @@ export const supportsStreaming = supportsCharacters;
 export const maxCharacters = (m: GenerationModel) => isV5Model(m) ? 22 : isV4Model(m) ? 6 : 0;
 
 /** Imported/processed images may be larger than the model canvas or not divisible by 64. */
-export function generationSize(width: number, height: number) {
-  const ratio = Math.min(1, 2048 / width, 2048 / height, Math.sqrt(3145728 / (width * height)));
+export function generationSize(width: number, height: number, maxDimension = MAX_GENERATION_DIMENSION) {
+  const ratio = Math.min(1, maxDimension / width, maxDimension / height, Math.sqrt(MAX_GENERATION_PIXELS / (width * height)));
   let w = Math.max(64, Math.round(width * ratio / 64) * 64);
   let h = Math.max(64, Math.round(height * ratio / 64) * 64);
-  while (w * h > 3145728) { if (w >= h) w -= 64; else h -= 64; }
+  while (w * h > MAX_GENERATION_PIXELS) { if (w >= h) w -= 64; else h -= 64; }
   return { width: w, height: h };
 }
 export const maxSamples = (m: GenerationModel, width: number, height: number) =>

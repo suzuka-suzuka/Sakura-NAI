@@ -1,3 +1,5 @@
+import { MAX_GENERATION_PIXELS, snapGenerationDimension } from "./nai/dimensions";
+
 export type Point = { x: number; y: number };
 export type Frame = Point & { width: number; height: number };
 export type FrameHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -12,11 +14,11 @@ export function resizeFrame(frame: Frame, handle: FrameHandle, dx: number, dy: n
   const right = frame.x + frame.width, bottom = frame.y + frame.height;
   let x = frame.x, y = frame.y, width = frame.width, height = frame.height;
   const snap = (v: number) => Math.round(v / 64) * 64;
-  if (handle.includes("w")) { width = Math.max(64, Math.min(2048, right - snap(frame.x + dx))); x = right - width; }
-  if (handle.includes("e")) width = Math.max(64, Math.min(2048, snap(frame.width + dx)));
-  if (handle.includes("n")) { height = Math.max(64, Math.min(2048, bottom - snap(frame.y + dy))); y = bottom - height; }
-  if (handle.includes("s")) height = Math.max(64, Math.min(2048, snap(frame.height + dy)));
-  while (width * height > 3145728) {
+  if (handle.includes("w")) { width = snapGenerationDimension(right - snap(frame.x + dx)); x = right - width; }
+  if (handle.includes("e")) width = snapGenerationDimension(frame.width + dx);
+  if (handle.includes("n")) { height = snapGenerationDimension(bottom - snap(frame.y + dy)); y = bottom - height; }
+  if (handle.includes("s")) height = snapGenerationDimension(frame.height + dy);
+  while (width * height > MAX_GENERATION_PIXELS) {
     if (handle === "n" || handle === "s" || (handle.length === 2 && height >= width)) height -= 64;
     else width -= 64;
   }

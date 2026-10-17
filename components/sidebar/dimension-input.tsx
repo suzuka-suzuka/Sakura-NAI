@@ -28,7 +28,7 @@ type Props = {
  * Numeric field for width/height.
  *
  * Replaces a native `<input type="number">`, whose spinner arrows are ~10px tall, require pixel
- * accuracy, and move the value one step per click — unusable for a range that spans 64…2048 in
+ * accuracy, and move the value one step per click — unusable for a wide pixel range in
  * increments of 64. Three input paths replace it, so the control fits whichever intent the user has:
  *
  *   drag  — press the number and move horizontally to scrub (the fast, approximate path)

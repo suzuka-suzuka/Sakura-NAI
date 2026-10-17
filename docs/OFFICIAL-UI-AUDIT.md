@@ -160,3 +160,11 @@
 - Furry 模式按 [官方标签文档](https://docs.novelai.net/en/image/tags/) 在正向词前添加 `fur dataset`。
 - 专用放大按 [当前接口实现](https://github.com/XTOGENY/ComfyUI-NovelAI-GENYTOOLS/blob/main/nai_client.py) 使用 V5 Curated、`declared_blur_sigma:0` 和 multipart 图片。输入像素的四个档位对应 1/2/3/4 Anlas；不再使用旧 4 倍参数。该项没有实扣验证。
 - 导演工具基础费用按输入面积归一化为 1–3 MP，移除背景为基础费用乘 3 再加 5；参考 [费用实现资料](https://github.com/caru-ini/novelai-sdk/blob/main/docs/for-ai/anlas-calculation.md)。不依赖该 SDK。
+
+## 长宽画布修正（2026-10-17）
+
+局部重绘的裁剪、扩展、尺寸输入、保存后重开、参数导入和生成请求共用 `lib/nai/dimensions.ts` 的规则：宽高按 64 像素步进，总面积不超过 3,145,728 像素，去掉额外的单边 2048 像素限制。例如 4096×768、768×4096 均可保留原尺寸。扩展时保留原图并自动蒙版新增区域；撤销和重做继续恢复画布、图层和蒙版。独立的 Enhance 工具仍使用原有尺寸规则。
+
+依据：2026-10-17 读取的 [NovelAI 官网](https://novelai.net/image) 公开脚本 `33ul2lw58_w11.js` 中，`validateParameters` 按总面积 3,145,728 校验，没有单边 2048 限制；[官方画布文档](https://docs.novelai.net/en/image/editimagecanvas/)说明边缘拖拽与尺寸输入，[局部重绘文档](https://docs.novelai.net/en/image/inpaint/)说明新增空白自动蒙版。以上核对和本地测试不代表真实付费生成验证。
+
+验证：119 项自动化测试、类型检查、Lint、生产构建及 `git diff --check` 通过。1440×960 桌面和 390×844 手机浏览器均验证了 4096×768、768×4096 尺寸输入、超过 2048 的边缘拖拽、撤销／重做、保存重开，以及原区域蒙版透明／新增区域蒙版不透明；摘要见 `logs/long-inpaint-browser-results.json`。浏览器错误与付费请求均为零，未部署。

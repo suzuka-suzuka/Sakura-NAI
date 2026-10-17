@@ -19,7 +19,7 @@ export const ENHANCE_LEVELS = [
 export const MAX_ENHANCE_PIXELS = 3145728;
 
 export function enhanceFactors(source: ToolImage, model: GenerationSettings["model"]): EnhanceFactor[] {
-  const { width, height } = generationSize(source.settings.width, source.settings.height);
+  const { width, height } = generationSize(source.settings.width, source.settings.height, 2048);
   const factors: EnhanceFactor[] = ([1, 1.5, 2] as const).filter(factor => {
     const w = Math.round(width * factor / 64) * 64, h = Math.round(height * factor / 64) * 64;
     return w <= 2048 && h <= 2048 && w * h <= MAX_ENHANCE_PIXELS;
@@ -61,7 +61,7 @@ export function enhancePrompt(prompt: string) {
 /** Shared by the toolbar quote, options dialog and generation submission. */
 export function imageToolSettings(source: ToolImage, kind: "enhance" | "variations", options: { factor?: EnhanceFactor; strength?: number; noise?: number; settings?: GenerationSettings } = {}): GenerationSettings {
   const factor = kind === "variations" ? 1 : options.factor ?? 1;
-  const canvas = generationSize(source.settings.width, source.settings.height);
+  const canvas = generationSize(source.settings.width, source.settings.height, kind === "enhance" ? 2048 : undefined);
   const multiplier = factor === "max" ? 1 : factor;
   const settings = kind === "enhance" ? options.settings ?? source.settings : source.settings;
   return {

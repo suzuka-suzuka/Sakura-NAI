@@ -4,6 +4,7 @@ import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Dices, Lock, LockOpen } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import {
   MODEL_OPTIONS,
   isV5Model, maxSamples,
@@ -32,11 +33,11 @@ const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
 /**
  * With aspect lock on, the edited side's proportional change is applied to the other side and
- * snapped back onto the 64px grid NovelAI requires. Clamped to the same 64…2048 bounds as the
+ * snapped back onto the 64px grid NovelAI requires. Clamped to the same bounds as the
  * fields themselves, so dragging one side to an extreme can't push the other out of range.
  */
 const scaleTo = (next: number, prev: number, other: number) =>
-  Math.min(2048, Math.max(64, Math.round((other * (next / prev)) / 64) * 64));
+  snapGenerationDimension(other * (next / prev));
 
 export function BasicTab() {
   useLocale();
@@ -143,7 +144,7 @@ export function BasicTab() {
             id="w"
             label={translateUI("Width")}
             min={64}
-            max={2048}
+            max={MAX_GENERATION_DIMENSION}
             step={64}
             value={s.width}
             onCommit={(width) => patch(linked ? { width, height: scaleTo(width, s.width, s.height) } : { width })}
@@ -153,7 +154,7 @@ export function BasicTab() {
             id="h"
             label={translateUI("Height")}
             min={64}
-            max={2048}
+            max={MAX_GENERATION_DIMENSION}
             step={64}
             value={s.height}
             onCommit={(height) => patch(linked ? { height, width: scaleTo(height, s.height, s.width) } : { height })}

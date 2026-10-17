@@ -4,14 +4,15 @@ import type { GenerationSettings } from "./types";
 import { qualityText, negativeText } from "./presets";
 import { buildV5Payload } from "./v5";
 import { applyImageInput } from "./image-input";
+import { isGenerationDimension, MAX_GENERATION_PIXELS } from "./dimensions";
 
 export function buildPayload(s: GenerationSettings, seed: number): GenerationPayload {
   if (!Number.isInteger(seed) || seed < 0 || seed > 4294967295) throw new Error("Invalid generation seed");
   if (!Number.isFinite(s.cfgRescale) || s.cfgRescale < 0 || s.cfgRescale > 1) throw new Error("Guidance rescale must be between 0 and 1");
   if (isV5Model(s.model)) return applyImageInput(buildV5Payload(s, seed), s, seed);
   if (!Object.values(Model).includes(s.model)) throw new Error("Unsupported image model");
-  if (![s.width, s.height].every(n => Number.isInteger(n) && n >= 64 && n <= 2048 && n % 64 === 0)) throw new Error("Image dimensions must be multiples of 64");
-  if (s.width * s.height > 3145728) throw new Error("Image dimensions must not exceed 3,145,728 pixels");
+  if (![s.width, s.height].every(isGenerationDimension)) throw new Error("Image dimensions must be multiples of 64");
+  if (s.width * s.height > MAX_GENERATION_PIXELS) throw new Error("Image dimensions must not exceed 3,145,728 pixels");
   if (!Number.isInteger(s.nSamples) || s.nSamples < 1 || s.nSamples > 8) throw new Error("Invalid batch size");
   const modern = isV4Model(s.model);
   const chars = s.characters.filter(c => c.enabled && c.prompt.trim());

@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useImageViewport } from "@/lib/use-image-viewport";
 import { resizeFrame, frameMask, type Frame, type FrameHandle } from "@/lib/editor-geometry";
 import { generationSize } from "@/lib/nai/models";
+import { isGenerationSize, MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import { useFocusTrap } from "@/lib/use-overlay";
 import { preserveCanvasMetadata } from "@/lib/nai/png-metadata";
 import { downloadDataUrl } from "@/lib/image-actions";
@@ -170,7 +171,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
     return c;
   };
   const applyFrame = async (next: Frame) => {
-    if (![next.width, next.height].every(n=>Number.isInteger(n)&&n>=64&&n<=2048&&n%64===0) || next.width*next.height>3145728) return;
+    if (!isGenerationSize(next.width, next.height)) return;
     if (busy || (next.x === 0 && next.y === 0 && next.width === w && next.height === h)) { setFrame(null); return; }
     setBusy(true);
     try {
@@ -259,9 +260,11 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
     </header>
     {tool === "frame" && <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 px-3 pb-3 text-xs">
       <span>{t("Canvas size")}</span>
-      {(["width", "height"] as const).map(key=><label key={key}>{t(key === "width" ? "Width" : "Height")} <input type="number" min={64} max={2048} step={64} aria-label={t(key === "width" ? "Canvas width" : "Canvas height")}
-        value={frame?.[key] ?? (key === "width" ? w : h)} onChange={e=>{const value=Number(e.target.value);if(!Number.isFinite(value))return;setFrame(old=>({...old??{x:0,y:0,width:w,height:h},[key]:Math.max(64,Math.min(2048,Math.round(value/64)*64))}));}} className="ml-1 w-20 rounded border border-border-soft bg-bg px-2 py-1" /></label>)}
-      <Button size="sm" disabled={!frame || busy || frame.width*frame.height>3145728} onClick={()=>frame&&void applyFrame(frame)}>{t("Apply canvas size")}</Button>
+      {(["width", "height"] as const).map(key=><label key={key}>{t(key === "width" ? "Width" : "Height")} <input type="number" min={64} max={MAX_GENERATION_DIMENSION} step={64} aria-label={t(key === "width" ? "Canvas width" : "Canvas height")}
+        value={frame?.[key] ?? (key === "width" ? w : h)} onChange={e=>{const value=Number(e.target.value);if(!Number.isFinite(value))return;setFrame(old=>({...old??{x:0,y:0,width:w,height:h},[key]:value}));}}
+        onBlur={e=>{const value=Number(e.target.value);if(Number.isFinite(value))setFrame(old=>({...old??{x:0,y:0,width:w,height:h},[key]:snapGenerationDimension(value)}));}}
+        onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();}} className="ml-1 w-20 rounded border border-border-soft bg-bg px-2 py-1" /></label>)}
+      <Button size="sm" disabled={!frame || busy || !isGenerationSize(frame.width,frame.height)} onClick={()=>frame&&void applyFrame(frame)}>{t("Apply canvas size")}</Button>
       {frame && <button type="button" onClick={()=>setFrame(null)}>{t("Cancel")}</button>}
     </div>}
     <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3">

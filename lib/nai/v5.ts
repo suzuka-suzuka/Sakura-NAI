@@ -3,6 +3,7 @@ import { Sampler } from "./protocol";
 import type { GenerationSettings } from "./types";
 import { isV5Model, maxSamples } from "./models";
 import { translateUI } from "../i18n";
+import { isGenerationSize } from "./dimensions";
 
 // Protocol references and capability boundaries are documented in docs/NAI-V5.md.
 // Keep V5 capabilities separate from legacy models.
@@ -27,7 +28,7 @@ export function v5Prompt(s: GenerationSettings) {
 
 export function buildV5Payload(s: GenerationSettings, seed: number) {
   if (!isV5Model(s.model)) throw new Error("Not a V5 model");
-  if (![s.width, s.height].every(v => Number.isInteger(v) && v >= 64 && v <= 2048 && v % 64 === 0) || s.width * s.height > 3145728)
+  if (!isGenerationSize(s.width, s.height))
     throw new Error(translateUI("V5 dimensions must be multiples of 64, with at most 3,145,728 pixels."));
   if (!Number.isInteger(s.nSamples) || s.nSamples < 1 || s.nSamples > maxSamples(s.model, s.width, s.height))
     throw new Error(translateUI("This V5 resolution supports at most {0} images per batch.", maxSamples(s.model, s.width, s.height)));

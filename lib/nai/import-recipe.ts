@@ -2,6 +2,7 @@ import { extractImageMetadata } from "./media";
 import { Model, Noise, Sampler } from "./protocol";
 import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, V5_FULL, V5_CURATED, type GenerationModel } from "./models";
 import { DEFAULT_SETTINGS, type CharacterSetting, type GenerationSettings } from "./types";
+import { MAX_GENERATION_DIMENSION, MAX_GENERATION_PIXELS } from "./dimensions";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -190,7 +191,7 @@ export function recipeFromNovelAIMetadata(
 
   const width = number(pick(bag, "width")) ?? image.width;
   const height = number(pick(bag, "height")) ?? image.height;
-  if (width >= 64 && width <= 2048 && height >= 64 && height <= 2048) {
+  if (width >= 64 && width <= MAX_GENERATION_DIMENSION && height >= 64 && height <= MAX_GENERATION_DIMENSION && width * height <= MAX_GENERATION_PIXELS) {
     settings.width = Math.round(width);
     settings.height = Math.round(height);
     imported.add("resolution");

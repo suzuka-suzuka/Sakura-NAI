@@ -4,6 +4,7 @@
 import { useId, useRef, useState } from "react";
 import { ArrowLeftRight, Expand, Pencil, Upload, Trash2, RectangleHorizontal, RectangleVertical, Square, ImagePlus, Eraser, PanelTopClose, PanelTopOpen } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import { translateUI as t, useLocale } from "@/lib/i18n";
 import { MODEL_OPTIONS, modelLabel, isV5Model, isV4Model, SIZE_TIERS, presetDims, tierAspectForSize, maxSamples } from "@/lib/nai/models";
 import { QUALITY_PRESETS, NEGATIVE_PRESETS, qualityPreset, type NegativePreset, type QualityPreset } from "@/lib/nai/presets";
@@ -162,11 +163,11 @@ export function OfficialComposer() {
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-semibold">{t("Resolution")}</span>
         <div className="flex items-center rounded bg-surface-2">
-          <input aria-label={t("Width")} type="number" min={64} max={2048} step={64} value={s.width} onChange={e => patch({ width: Number(e.target.value) })}
-            onBlur={e => patch({ width: Math.max(64, Math.min(2048, Math.round(Number(e.target.value) / 64) * 64)) })} className="w-16 bg-transparent p-1 text-center text-xs outline-none" />
+          <input aria-label={t("Width")} type="number" min={64} max={MAX_GENERATION_DIMENSION} step={64} value={s.width} onChange={e => patch({ width: Number(e.target.value) })}
+            onBlur={e => patch({ width: snapGenerationDimension(Number(e.target.value)) })} className="w-16 bg-transparent p-1 text-center text-xs outline-none" />
           <IconButton size="sm" label={t("Swap width and height")} onClick={() => patch({ width: s.height, height: s.width })}><ArrowLeftRight className="size-3" /></IconButton>
-          <input aria-label={t("Height")} type="number" min={64} max={2048} step={64} value={s.height} onChange={e => patch({ height: Number(e.target.value) })}
-            onBlur={e => patch({ height: Math.max(64, Math.min(2048, Math.round(Number(e.target.value) / 64) * 64)) })} className="w-16 bg-transparent p-1 text-center text-xs outline-none" />
+          <input aria-label={t("Height")} type="number" min={64} max={MAX_GENERATION_DIMENSION} step={64} value={s.height} onChange={e => patch({ height: Number(e.target.value) })}
+            onBlur={e => patch({ height: snapGenerationDimension(Number(e.target.value)) })} className="w-16 bg-transparent p-1 text-center text-xs outline-none" />
         </div>
       </div>
       <div className="flex items-center gap-2">

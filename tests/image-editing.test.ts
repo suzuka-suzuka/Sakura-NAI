@@ -12,6 +12,7 @@ import { imageToolSettings, activeGenerationSettings, enhanceFactors, enhancePro
 import { resizeFrame, frameMask, zoomAt, focusedCrop } from "../lib/editor-geometry";
 import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
 import { prepareImageInput } from "../lib/nai/image-input";
+import { isGenerationSize, MAX_GENERATION_DIMENSION } from "../lib/nai/dimensions";
 import { compositeInpainting, requestInpaintingMask } from "../lib/nai/inpainting-composite";
 
 test("outpainting restores source pixels even when the upstream redraws the entire canvas", () => {
@@ -106,7 +107,7 @@ test("image toolbar prices and submitted variations use the selected image and t
 });
 test("processed images fit the generation grid and dedicated upscale has four price buckets", () => {
   for(const [w,h] of [[416,608],[4096,4096],[3328,4864],[100,4000]]){
-    const s=generationSize(w,h);assert.equal(s.width%64,0);assert.equal(s.height%64,0);assert.ok(s.width<=2048&&s.height<=2048&&s.width*s.height<=3145728);
+    const s=generationSize(w,h);assert.ok(isGenerationSize(s.width,s.height));
   }
   assert.deepEqual([1048576,1747627,2446678,3145728].map(n=>upscaleCost(n,1)),[1,2,3,4]);
   assert.equal(upscaleCost(2048,2048),null);
@@ -154,11 +155,49 @@ test("all crop/expand handles snap to the model grid, hold the opposite edges an
   assert.deepEqual(resizeFrame(f,"n",0,129),{x:0,y:128,width:832,height:1088});
   for(const handle of ["n","s","e","w","ne","nw","se","sw"] as const) for(const d of [-10000,-64,64,10000]) {
     const r=resizeFrame(f,handle,d,d);
-    assert.ok(r.width>=64&&r.height>=64&&r.width<=2048&&r.height<=2048&&r.width*r.height<=3145728);
+    assert.ok(isGenerationSize(r.width,r.height));
     assert.equal(r.width%64,0);assert.equal(r.height%64,0);
     if(handle.includes("w"))assert.equal(r.x+r.width,832);
     if(handle.includes("n"))assert.equal(r.y+r.height,1216);
   }
+});
+
+test("long outpaint canvases survive resizing, reopening, request building and recipe import", () => {
+  const wide=resizeFrame({x:0,y:0,width:1024,height:768},"w",-3072,0);
+  const tall=resizeFrame({x:0,y:0,width:768,height:1024},"n",0,-3072);
+  assert.deepEqual(wide,{x:-3072,y:0,width:4096,height:768});
+  assert.deepEqual(tall,{x:0,y:-3072,width:768,height:4096});
+  assert.equal(resizeFrame(wide,"e",64,0).width,4096);
+  assert.equal(resizeFrame(tall,"s",0,64).height,4096);
+  for (const [width,height] of [[wide.width,wide.height],[tall.width,tall.height],[MAX_GENERATION_DIMENSION,64],[64,MAX_GENERATION_DIMENSION]]) {
+    assert.deepEqual(generationSize(width,height),{width,height});
+    for (const model of [Model.V4_5,DEFAULT_SETTINGS.model]) {
+      const settings={...DEFAULT_SETTINGS,model,width,height,nSamples:1,imageSource:{...source,width,height,mode:"infill" as const,mask:"data:image/png;base64,bWFzaw=="}};
+      const payload=buildPayload(settings,1);
+      assert.equal(payload.action,"infill");
+      assert.equal(payload.parameters.width,width);assert.equal(payload.parameters.height,height);
+      assert.equal(payload.parameters.mask,"bWFzaw==");
+      assert.equal(estimateCost(settings,null).total,estimateCost({...settings,width:2048,height:1536},null).total);
+    }
+    const recipe=recipeFromNovelAIMetadata([{keyword:"Comment",text:JSON.stringify({prompt:"long canvas",width,height})}],{width,height});
+    assert.equal(recipe.settings.width,width);assert.equal(recipe.settings.height,height);
+  }
+  // The separate Enhance tool retains its existing edge limit and available factors.
+  const enhanced={dataUrl:"test",settings:{...DEFAULT_SETTINGS,width:4096,height:768}};
+  assert.ok(enhanceFactors(enhanced,Model.V4_5).includes(1));
+  assert.deepEqual(imageToolSettings(enhanced,"enhance",{factor:1}).width,2048);
+  for (const [width,height] of [[4160,768],[768,4160],[4097,64],[0,1024],[NaN,64],[Infinity,64]]) {
+    assert.equal(isGenerationSize(width,height),false);
+    for (const model of [Model.V4_5,DEFAULT_SETTINGS.model])
+      assert.throws(()=>buildPayload({...DEFAULT_SETTINGS,model,width,height},1),/dimensions/);
+  }
+});
+
+test("long expansion keeps the original region unmasked and selects the added strip", () => {
+  const pixels=new Uint8ClampedArray(1024*64*4);
+  const expanded=frameMask(pixels,1024,64,{x:-3072,y:0,width:4096,height:64});
+  for(let y=0;y<64;y++) for(let x=0;x<4096;x++)
+    assert.equal(expanded[(y*4096+x)*4+3],x<3072?255:0);
 });
 
 test("expansion masks new empty pixels and moves existing strokes; cropping never selects preserved pixels", () => {
