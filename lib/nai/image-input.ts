@@ -34,22 +34,25 @@ export function applyImageInput(payload: GenerationPayload, s: GenerationSetting
   return payload;
 }
 
-/** Resize image and mask coverage together; retain grayscale until request preparation. */
+/** Match the base image to the request canvas; resize infill mask coverage alongside it. */
 export async function prepareImageInput(s: GenerationSettings, signal?: AbortSignal): Promise<GenerationSettings> {
   signal?.throwIfAborted();
   const source = s.imageSource;
-  if (source?.mode !== "infill" || (source.width === s.width && source.height === s.height)) return s;
+  if (!source || (source.width === s.width && source.height === s.height)) return s;
   const resize = async (url: string) => {
     const image = new Image(); image.src = url; await image.decode();
     signal?.throwIfAborted();
     const canvas = document.createElement("canvas"); canvas.width = s.width; canvas.height = s.height;
-    const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Unable to prepare inpainting image");
+    const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Unable to prepare image input");
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(image, 0, 0, s.width, s.height);
     return canvas.toDataURL("image/png");
   };
-  if (!source.mask) throw new Error("Draw an inpainting mask first");
-  const [dataUrl, mask] = await Promise.all([resize(source.dataUrl), resize(source.mask)]);
+  if (source.mode === "infill" && !source.mask) throw new Error("Draw an inpainting mask first");
+  const [dataUrl, mask] = await Promise.all([
+    resize(source.dataUrl),
+    source.mode === "infill" ? resize(source.mask!) : source.mask,
+  ]);
   signal?.throwIfAborted();
   return { ...s, imageSource: { ...source, dataUrl, mask, width: s.width, height: s.height } };
 }
