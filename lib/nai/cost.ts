@@ -64,12 +64,16 @@ export function estimateCost(s: GenerationSettings, account: AccountInfo | null,
   return { total: base + references + encoding, base, references, encoding, usesAllowance: !!(free && v5), accountKnown: !!account, valid: perImage <= 140 };
 }
 
-export type GenerationPreferences = { streamPreview: boolean; confirmPaid: boolean };
-export const DEFAULT_PREFERENCES: GenerationPreferences = { streamPreview: true, confirmPaid: true };
+export type GenerationPreferences = { streamPreview: boolean; confirmPaid: boolean; tagAutocomplete: boolean };
+export const DEFAULT_PREFERENCES: GenerationPreferences = { streamPreview: true, confirmPaid: true, tagAutocomplete: true };
 export function loadGenerationPreferences(): GenerationPreferences {
   try {
     const value = JSON.parse(localStorage.getItem("nya-generation-preferences") || "{}");
-    return { streamPreview: typeof value.streamPreview === "boolean" ? value.streamPreview : true, confirmPaid: typeof value.confirmPaid === "boolean" ? value.confirmPaid : true };
+    return {
+      streamPreview: typeof value.streamPreview === "boolean" ? value.streamPreview : true,
+      confirmPaid: typeof value.confirmPaid === "boolean" ? value.confirmPaid : true,
+      tagAutocomplete: typeof value.tagAutocomplete === "boolean" ? value.tagAutocomplete : true,
+    };
   } catch { return { ...DEFAULT_PREFERENCES }; }
 }
 export function saveGenerationPreferences(p: GenerationPreferences) {

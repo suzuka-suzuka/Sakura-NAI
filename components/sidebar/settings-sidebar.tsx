@@ -92,6 +92,7 @@ export function SettingsSidebar() {
     </div>
     <Modal open={activeTab === "advanced"} onClose={() => setUI({ activeTab: "basic" })} title={t("Settings")} className="max-w-lg">
       <div className="space-y-5">
+        <SwitchRow label={t("Prompt autocomplete")} hint={t("Suggest tags while typing in prompt fields.")} checked={prefs.tagAutocomplete} onCheckedChange={tagAutocomplete => patchPrefs({ tagAutocomplete })} />
         <SwitchRow label={t("Streaming preview")} hint={t("When off, keep the previous image until the new batch is complete.")} checked={prefs.streamPreview} onCheckedChange={streamPreview => patchPrefs({ streamPreview })} />
         <SwitchRow label={t("Confirm paid generation")} hint={t("Ask once when switching from 0 points to a paid generation.")} checked={prefs.confirmPaid} onCheckedChange={confirmPaid => patchPrefs({ confirmPaid })} />
         <SwitchRow label={t("Auto text")} hint={t('Collect quoted text into a Text: block. A manual Text: block takes precedence.')} checked={s.autoText} onCheckedChange={autoText => patch({ autoText })} />

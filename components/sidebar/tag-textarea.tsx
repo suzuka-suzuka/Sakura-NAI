@@ -28,6 +28,7 @@ type Props = {
 /** Textarea with inline NovelAI tag autocomplete (suggestTags). */
 export function TagTextarea({ id, value, onChange, placeholder, className, "aria-label": ariaLabel }: Props) {
   const client = useStore((s) => s.client);
+  const autocomplete = useStore((s) => s.preferences.tagAutocomplete);
   const listId = useId();
   const ref = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -37,16 +38,21 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
   // prompt, silently replaced the token you were typing with a tag you never picked. Enter and Tab
   // now pass through to native behaviour until you explicitly arrow into the list.
   const [active, setActive] = useState(-1);
-  const [open, setOpen] = useState(false);
+  const [suggestionsOpen, setOpen] = useState(false);
+  const open = autocomplete && suggestionsOpen;
   const tokenStart = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestId = useRef(0);
 
-  const close = () => {
+  const close = useCallback(() => {
     requestId.current++;
     if (timer.current) clearTimeout(timer.current);
     setOpen(false);
-  };
+  }, []);
+
+  useEffect(() => useStore.subscribe((state, previous) => {
+    if (state.preferences.tagAutocomplete !== previous.preferences.tagAutocomplete) close();
+  }), [close]);
 
   // A body portal escapes character cards and the scrolling sidebar. Keep it anchored to the
   // visible part of the input, including when a modal or sidebar scrolls independently.
@@ -126,15 +132,16 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
 
   const query = (val: string, cursor: number) => {
     close();
-    if (!client) return;
+    if (!client || !autocomplete) return;
     const { token, start } = currentToken(val, cursor);
     tokenStart.current = start;
     if (token.length < 2) return;
     const id = requestId.current;
     timer.current = setTimeout(async () => {
+      if (!useStore.getState().preferences.tagAutocomplete || id !== requestId.current) return;
       try {
         const res = await client.suggestTags(token, useStore.getState().settings.model);
-        if (id !== requestId.current || document.activeElement !== ref.current) return;
+        if (!useStore.getState().preferences.tagAutocomplete || id !== requestId.current || document.activeElement !== ref.current) return;
         setSuggestions(res.slice(0, 8));
         setActive(-1);
         setOpen(res.length > 0);
@@ -152,7 +159,7 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
 
   const accept = (s: TagSuggestion) => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !useStore.getState().preferences.tagAutocomplete) return;
     const cursor = el.selectionStart ?? value.length;
     const display = s.tag.replace(/_/g, " ");
     const left = value.slice(0, tokenStart.current).replace(/\s*$/, "");
@@ -201,11 +208,11 @@ export function TagTextarea({ id, value, onChange, placeholder, className, "aria
       <Textarea
         id={id}
         ref={ref}
-        role="combobox"
+        role={autocomplete ? "combobox" : undefined}
         aria-label={ariaLabel}
-        aria-expanded={open}
+        aria-expanded={autocomplete ? open : undefined}
         aria-controls={open ? listId : undefined}
-        aria-autocomplete="list"
+        aria-autocomplete={autocomplete ? "list" : undefined}
         aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
         value={value}
         placeholder={placeholder}

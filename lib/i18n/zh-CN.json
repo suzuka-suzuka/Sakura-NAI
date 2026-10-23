@@ -398,6 +398,8 @@
   "No preset tags are added.": "不追加预设提示词。",
   "Generation and preview": "生成与预览",
   "Streaming preview": "流式预览",
+  "Prompt autocomplete": "提示词自动补全",
+  "Suggest tags while typing in prompt fields.": "输入提示词时显示标签建议。",
   "When off, keep the previous image until the new batch is complete.": "关闭后，生成期间保留上一张图，完成后再显示新图。",
   "Confirm paid generation": "付费生成提醒",
   "Ask once when switching from 0 points to a paid generation.": "从 0 点切换到需要点数时，首次生成前弹窗提醒。",

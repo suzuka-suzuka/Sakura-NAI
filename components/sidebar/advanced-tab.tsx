@@ -22,6 +22,7 @@ export function AdvancedTab() {
   return (
     <>
       <Section title={translateUI("Generation and preview")}>
+        <Field><SwitchRow label={translateUI("Prompt autocomplete")} hint={translateUI("Suggest tags while typing in prompt fields.")} checked={preferences.tagAutocomplete} onCheckedChange={tagAutocomplete => patchPreferences({ tagAutocomplete })} /></Field>
         <Field><SwitchRow label={translateUI("Streaming preview")} hint={translateUI("When off, keep the previous image until the new batch is complete.")} checked={preferences.streamPreview} onCheckedChange={streamPreview => patchPreferences({ streamPreview })} /></Field>
         <Field><SwitchRow label={translateUI("Confirm paid generation")} hint={translateUI("Ask once when switching from 0 points to a paid generation.")} checked={preferences.confirmPaid} onCheckedChange={confirmPaid => patchPreferences({ confirmPaid })} /></Field>
       </Section>

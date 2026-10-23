@@ -295,7 +295,7 @@ test("disabling the paid reminder or acknowledging it never bypasses a point sho
   for (const [confirmPaid, paidAcknowledged] of [[false, false], [true, true]]) {
     const { client, generate } = setup(t, { steps: 29 });
     t.mock.method(client, "account", async () => ({ ...opus, anlas: 0 }));
-    useStore.setState({ preferences: { streamPreview: true, confirmPaid }, paidAcknowledged });
+    useStore.setState({ preferences: { ...useStore.getState().preferences, streamPreview: true, confirmPaid }, paidAcknowledged });
     await useStore.getState().generate();
     assert.equal(generate.mock.callCount(), 0);
     assert.equal(useStore.getState().pendingPayment, null);
@@ -415,7 +415,7 @@ test("over-limit prices never dispatch a generation or request payment confirmat
 test("preview disabled preserves old image (or empty canvas), submits final-only, and keeps request dimensions", async t => {
   for (const previous of [oldImage, null]) {
     const { client } = setup(t);
-    useStore.setState({ preferences: { streamPreview: false, confirmPaid: true }, selectedBatch: previous ? [previous] : null, selectedImage: previous });
+    useStore.setState({ preferences: { ...useStore.getState().preferences, streamPreview: false, confirmPaid: true }, selectedBatch: previous ? [previous] : null, selectedImage: previous });
     let finish!: () => void;
     let started!: () => void;
     const ready = new Promise<void>(r => { started = r; });
