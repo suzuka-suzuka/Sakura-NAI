@@ -199,6 +199,17 @@
 @keyframes generationSweep { from { transform: translateX(-100%); } to { transform: translateX(334%); } }
 .generation-sweep { animation: generationSweep 1.6s linear infinite; }
 .nai-workspace { background: var(--bg); }
+/* Let long import dialogs scroll within iOS webviews, including their safe-area insets. */
+.nai-modal-shell {
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+.nai-modal-panel {
+  max-height: calc(100vh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
 .nai-workspace section[aria-busy] { background: var(--bg); }
 [data-mode="light"] .nai-workspace, [data-mode="light"] .nai-workspace section[aria-busy] { background: var(--bg); }
 .nai-range { appearance: none; height: 10px; border-radius: 3px; background: var(--bg); border: 1px solid var(--border-soft); }

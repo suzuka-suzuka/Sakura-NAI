@@ -2,6 +2,7 @@
 
 import { translateUI } from "@/lib/i18n";
 import { pixelSnap } from "@/lib/pixel-snap";
+import { readImageDimensions } from "@/lib/nai/image-decode";
 import { base64ToBytes, Image as NaiImage } from "@/lib/nai/protocol";
 import { buildPayload } from "@/lib/nai/payload";
 import { DEFAULT_PREFERENCES, loadGenerationPreferences, saveGenerationPreferences, estimateCost, augmentCost, upscaleCost, type AccountInfo, type GenerationPreferences } from "@/lib/nai/cost";
@@ -707,8 +708,7 @@ export const useStore = create<Store>()((set, get) => ({
       const saved: GalleryImage[] = [];
       for (let i = 0; i < results.length; i++) {
         const dataUrl = results[i].toDataURL();
-        const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
-        const dimensions = { width: bitmap.width, height: bitmap.height }; bitmap.close();
+        const dimensions = await readImageDimensions(await (await fetch(dataUrl)).blob());
         const img: GalleryImage = {
           dataUrl,
           timestamp: new Date().toISOString(),

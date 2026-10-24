@@ -1,4 +1,5 @@
 import { extractImageMetadata } from "./media";
+import { readImageDimensions } from "./image-decode";
 import { Model, Noise, Sampler } from "./protocol";
 import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, V5_FULL, V5_CURATED, type GenerationModel } from "./models";
 import { DEFAULT_SETTINGS, type CharacterSetting, type GenerationSettings } from "./types";
@@ -13,15 +14,6 @@ export type ImportedRecipe = {
   reproductionWarnings: ("img2img" | "infill" | "edited")[];
   imageSettings?: { mode: "img2img" | "infill"; strength: number; noise: number; inpaintStrength: number; focused: boolean };
 };
-
-async function readPngDimensions(file: Blob) {
-  // Width and height are two big-endian uint32s in PNG's IHDR chunk. Reading only these eight
-  // bytes avoids decoding/base64-encoding the entire image a second time after metadata extraction.
-  const header = await file.slice(16, 24).arrayBuffer();
-  if (header.byteLength !== 8) return { width: DEFAULT_SETTINGS.width, height: DEFAULT_SETTINGS.height };
-  const view = new DataView(header);
-  return { width: view.getUint32(0), height: view.getUint32(4) };
-}
 
 const MODEL_VALUES = new Set(MODEL_OPTIONS.map((option) => option.value));
 const SAMPLER_VALUES = new Set(SAMPLER_OPTIONS.map((option) => option.value));
@@ -327,11 +319,9 @@ export function recipeReproductionMessage(recipe: ImportedRecipe): string | null
   return null;
 }
 
-/** Extract a generation recipe from NovelAI PNG text chunks or stealth metadata. */
+/** Extract a recipe from PNG text/stealth data or WebP/JPEG EXIF. */
 export async function importNovelAIRecipe(file: File | Blob): Promise<ImportedRecipe> {
-  // Preserve original PNG bytes, including metadata.
-  const png = file.type === "image/png" ? file : file.slice(0, file.size, "image/png");
-  const [metadata, image] = await Promise.all([extractImageMetadata(png), readPngDimensions(png)]);
+  const [metadata, image] = await Promise.all([extractImageMetadata(file), readImageDimensions(file)]);
   if (metadata.type !== "NOVELAI" || metadata.entries.length === 0) {
     throw new Error("No NovelAI generation metadata was found in this image.");
   }

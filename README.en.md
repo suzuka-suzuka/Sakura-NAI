@@ -29,6 +29,12 @@ Run Sakura NAI locally on Windows or host it on a Linux server. The browser call
 
 The empty canvas offers **Girl among blossoms**, **Sakura Miko**, and **Moonlit blossoms**. The Sakura Miko example uses the character tags `sakura miko, hololive`. Clicking an example **replaces the entire main positive prompt**, without generating an image or changing negative prompts and character settings.
 
+## Importing images on iPhone / iPad
+
+When the import dialog says **Generation parameters found**, expand **Preview parameters** to inspect the prompt and seed, then select **Import image parameters**. A notice about separately uploading reference images means the original reference files are not embedded in the result; it does not prevent importing the saved parameters.
+
+Import supports PNG text and hidden alpha metadata, plus NovelAI EXIF metadata retained in WebP, JPEG, and PNG files. If no parameters are found, use **Choose original file** to select the original download from Files. Photo conversion, screenshots, or messaging apps may remove metadata; missing parameters cannot be reconstructed from the picture. Use the website's download button to keep the original file.
+
 ## Run locally
 
 Install Bun and Node.js 22 or later, and use a modern browser with IndexedDB support. Download or clone this repository, then run these commands from its root:

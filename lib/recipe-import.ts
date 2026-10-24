@@ -7,6 +7,7 @@ import { Model } from "./nai/protocol";
 import { generationSize } from "./nai/models";
 import { recipeReproductionMessage, type ImportedRecipe } from "./nai/import-recipe";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "./nai/types";
+import { isImageFile, pickImageFile } from "./image-picker";
 
 export type RecipeImportOptions = {
   prompt: boolean; negativePrompt: boolean; characters: boolean; settings: boolean; seed: boolean;
@@ -46,7 +47,6 @@ export function selectedRecipeSettings(current: GenerationSettings, recipe: Impo
 function warnRecipeLimitations(recipe: ImportedRecipe) {
   const message = recipeReproductionMessage(recipe);
   if (message) toast.warning(translateUI(message));
-  if (recipe.omittedReferences) toast.warning(translateUI("Reference strengths were found, but source reference images are not embedded in NovelAI PNGs."));
 }
 
 export type ImageImportPurpose = "recipe" | "img2img" | "vibe" | "directorReference";
@@ -71,7 +71,7 @@ function dropImportBlocked() {
 /** Read a dropped image without changing settings. Fixed-purpose file pickers keep their own paths. */
 export async function prepareImageImport(file: File | null | undefined): Promise<boolean> {
   if (!file || dropImportBlocked()) return false;
-  if (!file.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(file.name)) {
+  if (!isImageFile(file)) {
     toast.error(translateUI("Choose an image file."));
     return false;
   }
@@ -108,7 +108,7 @@ export async function prepareImageImport(file: File | null | undefined): Promise
     return true;
   } catch (error) {
     if (request !== dropRequest) return false;
-    toast.error(error instanceof Error ? error.message : translateUI("The image could not be read."), { id: DROP_TOAST_ID });
+    toast.error(translateUI(error instanceof Error ? error.message : "The image could not be read."), { id: DROP_TOAST_ID });
     return false;
   }
 }
@@ -148,7 +148,8 @@ export function applyImageImport(purpose: ImageImportPurpose, options = DEFAULT_
       : "Added {0} as a character reference. Model switched to V4.5 Full.", image.filename), { id: DROP_TOAST_ID });
   }
   store.closeEnhancement();
-  store.setUI({ imageImport: null, activeTab: "basic", settingsCollapsed: false, focusedIndex: null, showPositions: false });
+  store.setUI({ imageImport: null, activeTab: "basic", settingsCollapsed: false, galleryOpen: false,
+    negativePromptActive: purpose === "recipe" && !options.prompt && options.negativePrompt, focusedIndex: null, showPositions: false });
   return true;
 }
 
@@ -165,7 +166,7 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
   const state = useStore.getState();
   if (state.isGenerating || state.isPreparing || state.isDirectorProcessing || state.imageEditor) return false;
 
-  if (!file.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(file.name)) {
+  if (!isImageFile(file)) {
     toast.error(translateUI("Choose an image file."));
     return false;
   }
@@ -206,7 +207,7 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
     });
     // Reveal the composer — the recipe just rewrote it, and on compact layouts (or with the rail
     // collapsed via `[`) the destination is off screen, so the import looks like it did nothing.
-    setUI({ activeTab: "basic", settingsCollapsed: false });
+    setUI({ activeTab: "basic", settingsCollapsed: false, galleryOpen: false, negativePromptActive: false });
 
     warnRecipeLimitations(recipe);
     return true;
@@ -222,11 +223,9 @@ export async function importRecipeFile(file: File | null | undefined): Promise<b
  * the same feature — drag-and-drop alone would make recipe import unusable without a pointer.
  */
 export function pickRecipeFile() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/*";
-  input.addEventListener("change", () => {
-    void prepareImageImport(input.files?.[0]);
-  });
-  input.click();
+  pickImageFile(file => { void prepareImageImport(file); });
+}
+
+export function pickOriginalRecipeFile() {
+  pickImageFile(file => { void prepareImageImport(file); }, true);
 }

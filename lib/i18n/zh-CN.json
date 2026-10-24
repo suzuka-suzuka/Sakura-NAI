@@ -596,5 +596,12 @@
   "Saved image settings: strength {0}, noise {1}": "已保存的图像参数：强度 {0}，噪声 {1}",
   "This image was generated using inpainting. You can import its parameters, but reproducing it also requires the original base image and mask.": "这张图片使用了局部重绘。可以导入生成参数，但要复现相同结果，还需要当时的原始底图和蒙版。",
   "This image was generated using Image2Image. You can import its parameters, but reproducing it also requires the original base image.": "这张图片使用了图生图。可以导入生成参数，但要复现相同结果，还需要当时的原始底图。",
-  "This image was cropped or edited. Its generation parameters were kept, but those parameters alone cannot reproduce the edited image.": "这张图片经过裁剪或编辑，生成参数已保留，但仅凭这些参数无法复现编辑后的图片。"
+  "This image was cropped or edited. Its generation parameters were kept, but those parameters alone cannot reproduce the edited image.": "这张图片经过裁剪或编辑，生成参数已保留，但仅凭这些参数无法复现编辑后的图片。",
+  "Generation parameters found": "已读取到生成参数",
+  "Parameters can be imported. To reuse the original reference images, upload those files separately.": "参数可以正常导入。如需复用当时的参考图，请另外上传参考图文件。",
+  "Preview parameters": "查看已读取的参数",
+  "Empty": "空",
+  "Choose original file": "重新选择原始文件",
+  "On iPhone or iPad, choose the original download from Files. Photos, screenshots, and messaging apps may remove generation parameters.": "iPhone／iPad 请从「文件」选取下载的原图；相册转码、截图或聊天软件转发可能移除生成参数。",
+  "The image is too large to import on this device.": "图片过大，当前设备无法处理，请选择较小的图片。"
 }

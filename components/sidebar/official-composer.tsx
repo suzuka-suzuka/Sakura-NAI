@@ -9,6 +9,7 @@ import { translateUI as t, useLocale } from "@/lib/i18n";
 import { MODEL_OPTIONS, modelLabel, isV5Model, isV4Model, SIZE_TIERS, presetDims, tierAspectForSize, maxSamples } from "@/lib/nai/models";
 import { QUALITY_PRESETS, NEGATIVE_PRESETS, qualityPreset, type NegativePreset, type QualityPreset } from "@/lib/nai/presets";
 import { prepareImageImport } from "@/lib/recipe-import";
+import { IMAGE_FILE_ACCEPT } from "@/lib/image-picker";
 import { TagTextarea } from "./tag-textarea";
 import { PresetSelect } from "./preset-select";
 import { CharactersTab } from "./characters-tab";
@@ -114,7 +115,7 @@ export function ImageInputPanel() {
   };
   return <section className="space-y-3 px-3 py-4">
     <h3 className="text-[12px] text-muted">{t("Reference images")}</h3>
-    <input ref={input} type="file" accept="image/*" className="hidden" onChange={e => void upload(e.target.files?.[0])} aria-label={t("Upload base image")} />
+    <input ref={input} type="file" accept={IMAGE_FILE_ACCEPT} className="hidden" onChange={e => void upload(e.target.files?.[0])} aria-label={t("Upload base image")} />
     <div className="rounded border border-border-soft p-2.5">
       <div className="flex items-center gap-3">
         {source ? <img src={source.dataUrl} alt={t("Base image")} className="h-20 w-14 rounded object-contain" /> : <ImagePlus className="size-6 shrink-0" />}

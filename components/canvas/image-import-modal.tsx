@@ -4,9 +4,10 @@ import { FileSliders, ImagePlus, Palette, UserRound } from "lucide-react";
 import { useState } from "react";
 import { translateUI as t, useLocale } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
-import { applyImageImport, DEFAULT_RECIPE_IMPORT, type ImageImportPurpose, type RecipeImportOptions, type ImageImportCandidate } from "@/lib/recipe-import";
+import { applyImageImport, pickOriginalRecipeFile, DEFAULT_RECIPE_IMPORT, type ImageImportPurpose, type RecipeImportOptions, type ImageImportCandidate } from "@/lib/recipe-import";
 import type { ImportedRecipe } from "@/lib/nai/import-recipe";
 import { recipeReproductionMessage } from "@/lib/nai/import-recipe";
+import { modelLabel } from "@/lib/nai/models";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 
@@ -42,7 +43,11 @@ function ImportContent({ image, busy, close }: { image: ImageImportCandidate; bu
         </div>
       </div>
       {image.recipe ? <ParameterImport busy={busy} recipe={image.recipe} options={options} setOptions={setOptions} /> :
-        <p className="mb-4 text-xs text-muted">{t(image.metadataError ? "The image is readable, but its generation metadata could not be read." : "This image has no generation metadata. You can still use it as a base or reference image.")}</p>}
+        <div className="mb-4 space-y-2 text-xs leading-relaxed text-muted">
+          <p>{t(image.metadataError ? "The image is readable, but its generation metadata could not be read." : "This image has no generation metadata. You can still use it as a base or reference image.")}</p>
+          <p>{t("On iPhone or iPad, choose the original download from Files. Photos, screenshots, and messaging apps may remove generation parameters.")}</p>
+          <Button variant="outline" size="sm" disabled={busy} onClick={pickOriginalRecipeFile}>{t("Choose original file")}</Button>
+        </div>}
       <div className="grid gap-2 sm:grid-cols-2">
         {choices.map(({ purpose, title, icon: Icon, disabled }) => <button
           key={purpose} type="button" disabled={busy || disabled}
@@ -68,10 +73,22 @@ function ParameterImport({ busy, recipe, options, setOptions }: {
     { key: "append", label: "Append prompts and characters" }, { key: "clean", label: "Start from default settings" },
   ];
   return <div className="mb-4 space-y-3 rounded-[var(--radius-card)] border border-border-soft p-3">
-    <p className="text-xs font-semibold">{t("Choose metadata to import")}</p>
+    <p className="text-xs font-semibold text-accent">{t("Generation parameters found")}</p>
     {warning && <p role="note" className="text-xs leading-relaxed text-amber-600 dark:text-amber-400">{t(warning)}</p>}
-    {recipe.omittedReferences && <p className="text-xs leading-relaxed text-muted">{t("Reference strengths were found, but source reference images are not embedded in NovelAI PNGs.")}</p>}
+    {recipe.omittedReferences && <p className="text-xs leading-relaxed text-muted">{t("Parameters can be imported. To reuse the original reference images, upload those files separately.")}</p>}
     {recipe.imageSettings && <p className="text-xs text-muted">{t("Saved image settings: strength {0}, noise {1}", recipe.imageSettings.mode === "infill" ? recipe.imageSettings.inpaintStrength : recipe.imageSettings.strength, recipe.imageSettings.noise)}</p>}
+    <details className="text-xs">
+      <summary className="cursor-pointer py-1 text-fg-2">{t("Preview parameters")}</summary>
+      <dl className="mt-2 max-h-40 space-y-2 overflow-y-auto rounded bg-bg p-2">
+        {recipe.importedFields.includes("model") && <div><dt className="inline text-muted">{t("Model")}: </dt><dd className="inline">{modelLabel(recipe.settings.model)}</dd></div>}
+        {recipe.importedFields.includes("prompt") && <div><dt className="text-muted">{t("Prompt")}</dt><dd className="whitespace-pre-wrap break-words">{recipe.settings.prompt || t("Empty")}</dd></div>}
+        {recipe.importedFields.includes("undesired content") && <div><dt className="text-muted">{t("Undesired content")}</dt><dd className="whitespace-pre-wrap break-words">{recipe.settings.negativePrompt || t("Empty")}</dd></div>}
+        {recipe.settings.characters.map((character, index) => <div key={index}><dt className="text-muted">{t("Characters")} {index + 1}</dt><dd className="whitespace-pre-wrap break-words">{character.prompt}</dd></div>)}
+        {recipe.importedFields.includes("seed") && <div><dt className="inline text-muted">{t("Seed")}: </dt><dd className="inline">{recipe.settings.seed}</dd></div>}
+        {recipe.importedFields.includes("steps") && <div><dt className="inline text-muted">{t("Steps")}: </dt><dd className="inline">{recipe.settings.steps}</dd></div>}
+      </dl>
+    </details>
+    <p className="text-xs text-muted">{t("Choose metadata to import")}</p>
     <div className="flex flex-wrap gap-x-4 gap-y-2">
       {fields.map(({ key, label }) => <label key={key} className="flex items-center gap-1.5 text-xs">
         <input type="checkbox" checked={options[key]} disabled={busy} className="accent-accent" onChange={event => setOptions(previous => ({ ...previous, [key]: event.target.checked }))} />{t(label)}

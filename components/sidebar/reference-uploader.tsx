@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { parseReference } from "@/lib/nai/client";
+import { IMAGE_FILE_ACCEPT } from "@/lib/image-picker";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Slider } from "@/components/ui/slider";
@@ -44,7 +45,7 @@ export function ReferenceUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_FILE_ACCEPT}
         multiple
         className="hidden"
         onChange={(e) => onFiles(e.target.files)}
