@@ -38,7 +38,13 @@ export type ReferenceImage = {
   preview: string;
   strength: number;
   informationExtracted: number;
+  name?: string;
+  /** Original pixels may be absent in encodings exported by NovelAI or embedded in PNGs. */
+  encodings?: VibeEncoding[];
+  sourceModel?: GenerationModel;
 };
+
+export type VibeEncoding = { model: GenerationModel; informationExtracted: number; data: string; key?: string };
 
 export type GenerationSettings = {
   prompt: string;

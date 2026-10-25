@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Browser-local image data URLs need no remote optimization. */
 
 import { useId, useRef, useState } from "react";
-import { ArrowLeftRight, Expand, Pencil, Upload, Trash2, RectangleHorizontal, RectangleVertical, Square, ImagePlus, Eraser, PanelTopClose, PanelTopOpen } from "lucide-react";
+import { ArrowLeftRight, Expand, Pencil, Upload, Trash2, RectangleHorizontal, RectangleVertical, Square, ImagePlus, Eraser, PanelTopClose, PanelTopOpen, Palette } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import { translateUI as t, useLocale } from "@/lib/i18n";
@@ -138,7 +138,7 @@ export function ImageInputPanel() {
           {source.focused && <span className="mt-1 block text-muted">{t("Upscale the masked region for detail, then blend it back. Pixels beyond the softened edge stay intact.")}</span>}</label>}
       </div>}
     </div>
-    {!isV5Model(s.model) && <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details>}
+    {!isV5Model(s.model) ? <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details> : s.vibe.length > 0 && <p className="text-xs text-muted">{t("{0} saved Vibe(s). V5 does not use them; open Styles and presets to apply them with a compatible model.", s.vibe.length)}</p>}
     {s.model.includes("4-5") && <details open={s.directorReference.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Director / character reference")}</summary><ReferenceUploader field="directorReference" emptyLabel={t("Guide character features from a reference.")} /></details>}
   </section>;
 }
@@ -156,6 +156,7 @@ export function OfficialComposer() {
       </Select></div>
       {(isV5Model(s.model) || isV4Model(s.model)) && <button aria-label={t("Prompt mode")} title={t("Furry mode adds fur dataset at the start of the prompt.")} className="shrink-0 rounded bg-surface-2 px-2 py-2 text-xs" onClick={()=>patch({promptMode:s.promptMode === "furry" ? "anime" : "furry"})}>{s.promptMode === "furry" ? "Furry" : "Anime"}</button>}
     </div>
+    <div className="px-3 pb-3"><button type="button" onClick={() => useStore.getState().setUI({ showStyleLibrary: true })} className="flex w-full items-center justify-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs font-semibold text-accent transition-colors hover:bg-accent/10"><Palette className="size-4" />{t("Import style / preset")}</button></div>
     <PromptSection />
     <CharactersTab />
     <ImageInputPanel />

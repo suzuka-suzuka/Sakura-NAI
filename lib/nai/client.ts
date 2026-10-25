@@ -6,7 +6,8 @@ import { buildPayload } from "./payload";
 import { prepareInpainting } from "./image-input";
 import { prepareFocusedInpainting } from "./focused-inpainting";
 import { generationPngMetadata } from "./png-metadata";
-import { DEFAULT_SETTINGS, type GenerationSettings } from "./types";
+import { DEFAULT_SETTINGS, type GenerationSettings, type ReferenceImage, type VibeEncoding } from "./types";
+import { MAX_VIBES, vibeEncoding } from "./vibes";
 import { isV4Model, isV5Model, supportsStreaming, type GenerationModel } from "./models";
 
 // ---- Connection config (persisted in localStorage; the token never leaves the browser) ----
@@ -135,7 +136,7 @@ export class NaiClient {
   private readonly connection: ConnectionConfig;
   private readonly vibes = new Map<string, string>();
   private activeController?: AbortController;
-  constructor(cfg: ConnectionConfig) { this.connection = { ...cfg }; this.transport = new NaiTransport(this.connection); }
+  constructor(cfg: ConnectionConfig, private readonly onVibeEncoded?: (ref: ReferenceImage, encoding: VibeEncoding) => void) { this.connection = { ...cfg }; this.transport = new NaiTransport(this.connection); }
   cancelGeneration() { this.activeController?.abort(); }
 
   async account() {
@@ -143,7 +144,7 @@ export class NaiClient {
   }
   uncachedVibes(s: GenerationSettings) {
     if (s.imageSource?.mode === "infill" || isV5Model(s.model) || !isV4Model(s.model) || (s.model.includes("4-5") && s.directorReference.length)) return 0;
-    return new Set(s.vibe.map(r => JSON.stringify([s.model, r.informationExtracted, r.base64])).filter(key => !this.vibes.has(key))).size;
+    return new Set(s.vibe.filter(r => !vibeEncoding(r, s.model)).map(r => JSON.stringify([s.model, r.informationExtracted, r.base64])).filter(key => !this.vibes.has(key))).size;
   }
   async generate(settings: GenerationSettings, preview = true): Promise<GenerateHandle> {
     const seed = settings.seed >= 0 ? settings.seed : randomSeed();
@@ -193,12 +194,15 @@ export class NaiClient {
       p.director_reference_secondary_strength_values = s.directorReference.map(() => 1);
       p.director_reference_information_extracted = s.directorReference.map(r => r.informationExtracted);
     } else if (s.vibe.length) {
+      if (s.vibe.length > MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
+      // Validate all references before an encoding request can consume Anlas.
+      if (s.vibe.some(ref => !vibeEncoding(ref, s.model) && !ref.base64)) throw new Error("This Vibe has no encoding for the selected model. Switch to a compatible model or upload its original image.");
       const images: string[] = [];
       for (const ref of s.vibe) {
         if (!isV4Model(s.model)) { images.push(ref.base64); continue; }
         // Cache encoded vibes per connection, model, image and extraction amount.
         const key = JSON.stringify([s.model, ref.informationExtracted, ref.base64]);
-        let encoded = this.vibes.get(key);
+        let encoded = vibeEncoding(ref, s.model)?.data ?? this.vibes.get(key);
         if (!encoded) {
           const res = await this.transport.request("/ai/encode-vibe", { image: ref.base64, model: s.model, information_extracted: ref.informationExtracted }, signal, "application/octet-stream");
           encoded = bytesToBase64(new Uint8Array(await res.arrayBuffer()));
@@ -206,6 +210,7 @@ export class NaiClient {
           if (this.vibes.size >= 32) this.vibes.delete(this.vibes.keys().next().value!);
           this.vibes.set(key, encoded);
         }
+        if (!vibeEncoding(ref, s.model)) this.onVibeEncoded?.(ref, { model: s.model, informationExtracted: ref.informationExtracted, data: encoded });
         images.push(encoded);
       }
       p.reference_image_multiple = images;

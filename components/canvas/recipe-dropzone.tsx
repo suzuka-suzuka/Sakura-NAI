@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { FileImage } from "lucide-react";
 import { prepareImageImport } from "@/lib/recipe-import";
+import { isStyleFile, prepareStyleImport } from "@/lib/style-import";
 import { spring, usePrefersReducedMotion } from "@/lib/motion";
 
 /** True only for a drag carrying files — dragging selected text or an image within the page must
@@ -52,7 +53,9 @@ export function RecipeDropzone() {
       e.preventDefault();
       depth.current = 0;
       setActive(false);
-      void prepareImageImport(e.dataTransfer?.files?.[0]);
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (files.some(file => isStyleFile(file.name))) void prepareStyleImport(files);
+      else void prepareImageImport(files[0]);
     };
 
     window.addEventListener("dragenter", onEnter);
@@ -97,9 +100,9 @@ export function RecipeDropzone() {
             </motion.span>
             <div>
               <p className="font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-0.01em] text-fg">
-                {translateUI("Drop to import image")}</p>
+                {translateUI("Drop to import an image, Vibe or preset")}</p>
               <p className="mt-1 max-w-xs text-[12.5px] text-muted">
-                {translateUI("Choose parameters, Image2Image, Vibe Transfer, or character reference after dropping.")}</p>
+                {translateUI("Images, .naiv4vibe, bundles, and prompt presets.")}</p>
             </div>
           </motion.div>
         </motion.div>

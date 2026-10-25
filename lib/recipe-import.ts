@@ -8,27 +8,29 @@ import { generationSize } from "./nai/models";
 import { recipeReproductionMessage, type ImportedRecipe } from "./nai/import-recipe";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "./nai/types";
 import { isImageFile, pickImageFile } from "./image-picker";
+import { compatibleVibeModel, MAX_VIBES } from "./nai/vibes";
+import { beginFileImport, isLatestFileImport, FILE_IMPORT_TOAST_ID } from "./file-import-request";
 
 export type RecipeImportOptions = {
-  prompt: boolean; negativePrompt: boolean; characters: boolean; settings: boolean; seed: boolean;
+  prompt: boolean; negativePrompt: boolean; characters: boolean; settings: boolean; seed: boolean; vibes?: boolean;
   append: boolean; clean: boolean;
 };
 export const DEFAULT_RECIPE_IMPORT: RecipeImportOptions = {
-  prompt: true, negativePrompt: true, characters: true, settings: true, seed: true, append: false, clean: false,
+  prompt: true, negativePrompt: true, characters: true, settings: true, seed: true, vibes: true, append: false, clean: false,
 };
 
 /** Build a complete snapshot while preserving unchecked fields and the existing Undo action. */
 export function selectedRecipeSettings(current: GenerationSettings, recipe: ImportedRecipe, options = DEFAULT_RECIPE_IMPORT): GenerationSettings {
   const result = structuredClone(options.clean ? DEFAULT_SETTINGS : current);
   const incoming = recipe.settings;
-  const selected = (options.prompt || options.negativePrompt || options.characters || options.settings || options.seed);
+  const selected = (options.prompt || options.negativePrompt || options.characters || options.settings || options.seed || options.vibes && incoming.vibe.length > 0);
   if (!selected) return structuredClone(current);
   if (options.settings) {
     const { prompt: _p, negativePrompt: _n, characters: _c, seed: _s, vibe: _v, directorReference: _r, imageSource: _i,
       qualityToggle: _qt, qualityPreset: _qp, ucPreset: _uc, autoText: _at, ...sampling } = incoming;
     Object.assign(result, sampling);
-    // A PNG has no input/reference pixels. Do not accidentally reuse an unrelated source.
-    result.vibe = []; result.directorReference = []; result.imageSource = null;
+    // Replacing sampling settings must not reuse an unrelated input or precise reference.
+    result.vibe = options.vibes === false ? result.vibe : []; result.directorReference = []; result.imageSource = null;
   }
   const join = (existing: string, value: string) => [existing, value].filter(Boolean).join(", ");
   if (options.prompt) {
@@ -41,6 +43,13 @@ export function selectedRecipeSettings(current: GenerationSettings, recipe: Impo
   }
   if (options.characters) result.characters = [...(options.append ? result.characters : []), ...incoming.characters.map(c => ({ ...c, id: crypto.randomUUID() }))];
   if (options.seed) result.seed = incoming.seed;
+  if (options.vibes && incoming.vibe.length) {
+    if (result.imageSource?.mode === "infill") throw new Error("Vibe Transfer is unavailable during inpainting. Switch to text-to-image or Image2Image first.");
+    result.vibe = [...(options.append && !options.clean ? current.vibe : []), ...structuredClone(incoming.vibe)];
+    if (result.vibe.length > MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
+    result.model = compatibleVibeModel(result.vibe, result.model);
+    result.directorReference = [];
+  }
   return result;
 }
 
@@ -60,8 +69,7 @@ export type ImageImportCandidate = {
   metadataError: boolean;
 };
 
-const DROP_TOAST_ID = "image-drop-import";
-let dropRequest = 0;
+const DROP_TOAST_ID = FILE_IMPORT_TOAST_ID;
 
 function dropImportBlocked() {
   const s = useStore.getState();
@@ -76,7 +84,7 @@ export async function prepareImageImport(file: File | null | undefined): Promise
     return false;
   }
 
-  const request = ++dropRequest;
+  const request = beginFileImport();
   toast.loading(translateUI("Reading image and generation metadata…"), { id: DROP_TOAST_ID });
   try {
     // Read metadata from the original bytes: canvas re-encoding removes PNG text and stealth data.
@@ -99,15 +107,15 @@ export async function prepareImageImport(file: File | null | undefined): Promise
         metadataError = true;
       }
     }
-    if (request !== dropRequest) return false;
+    if (!isLatestFileImport(request)) return false;
     toast.dismiss(DROP_TOAST_ID);
     if (dropImportBlocked()) return false;
-    useStore.getState().setUI({ imageImport: {
+    useStore.getState().setUI({ showStyleLibrary: false, styleImport: null, imageImport: {
       filename: file.name, ...parsed, preview: `data:image/png;base64,${parsed.base64}`, recipe, metadataError,
     } });
     return true;
   } catch (error) {
-    if (request !== dropRequest) return false;
+    if (!isLatestFileImport(request)) return false;
     toast.error(translateUI(error instanceof Error ? error.message : "The image could not be read."), { id: DROP_TOAST_ID });
     return false;
   }
@@ -120,8 +128,11 @@ export function applyImageImport(purpose: ImageImportPurpose, options = DEFAULT_
   if (!image || dropImportBlocked()) return false;
   if (purpose === "recipe") {
     if (!image.recipe) return false;
-    if (![options.prompt, options.negativePrompt, options.characters, options.settings, options.seed].some(Boolean)) return false;
-    store.restoreSettings(selectedRecipeSettings(store.settings, image.recipe, options), {
+    if (![options.prompt, options.negativePrompt, options.characters, options.settings, options.seed, options.vibes && image.recipe.settings.vibe.length].some(Boolean)) return false;
+    let imported: GenerationSettings;
+    try { imported = selectedRecipeSettings(store.settings, image.recipe, options); }
+    catch (error) { toast.error(translateUI(error instanceof Error ? error.message : "The image could not be read.")); return false; }
+    store.restoreSettings(imported, {
       message: translateUI("Imported {0} recipe fields from {1}", image.recipe.importedFields.length, image.filename),
       toastId: DROP_TOAST_ID,
     });

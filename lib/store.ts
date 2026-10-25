@@ -27,6 +27,10 @@ import { CHARACTER_STARTERS, type CharacterKind } from "@/lib/nai/characters";
 import { activeGenerationSettings, enhanceFactors, ENHANCE_LEVELS, imageToolOutputSize, type Enhancement } from "@/lib/nai/image-tools";
 import type { EmotionOptions, Image } from "@/lib/nai/protocol";
 import type { ImageImportCandidate } from "@/lib/recipe-import";
+import type { StyleImportCandidate } from "@/lib/style-import";
+import type { StylePreset } from "@/lib/style-presets";
+import { loadStyleLibrary, saveStyleLibrary, loadReferenceSession, saveReferenceSession } from "@/lib/db/style-library";
+import { rememberEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import {
   loadImages,
   saveImage,
@@ -92,6 +96,10 @@ type Store = {
   addReference: (field: ReferenceField, ref: ReferenceImage) => void;
   updateReference: (field: ReferenceField, i: number, patch: Partial<ReferenceImage>) => void;
   removeReference: (field: ReferenceField, i: number) => void;
+  stylePresets: StylePreset[];
+  styleStatus: "loading" | "ready" | "error";
+  saveStylePresets: (presets: StylePreset[]) => Promise<void>;
+  deleteStylePreset: (id: string) => Promise<void>;
 
   // ---- gallery ----
   images: GalleryImage[];
@@ -148,12 +156,14 @@ type Store = {
   showPositions: boolean;
   imageEditor: { mode: "draw" | "mask"; source: string | null } | null;
   imageImport: ImageImportCandidate | null;
+  showStyleLibrary: boolean;
+  styleImport: StyleImportCandidate | null;
   focusedIndex: number | null;
   setUI: (
     patch: Partial<
       Pick<
         Store,
-        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor" | "imageImport"
+        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor" | "imageImport" | "showStyleLibrary" | "styleImport"
       >
     >,
   ) => void;
@@ -163,6 +173,29 @@ type Store = {
 };
 
 let accountRequest: { client: NaiClient; promise: Promise<void> } | null = null;
+let libraryWrite: Promise<void> = Promise.resolve();
+function newClient(cfg: ConnectionConfig) {
+  return new NaiClient(cfg, (ref, encoding) => {
+    const state = useStore.getState();
+    state.patchSettings({ vibe: state.settings.vibe.map(current => current.base64 && current.base64 === ref.base64 ? rememberEncoding(current, encoding) : current) });
+    // Cache into saved setups too, so switching presets after a refresh does not buy the same encoding again.
+    const pending = libraryWrite.catch(() => {}).then(async () => {
+      const current = useStore.getState().stylePresets;
+      let changed = false;
+      const next = current.map(preset => {
+        if (preset.kind !== "vibe") return preset;
+        const vibes = preset.vibes.map(value => {
+          if (!value.base64 || value.base64 !== ref.base64 || value.encodings?.some(item => item.model === encoding.model && item.informationExtracted === encoding.informationExtracted && item.data === encoding.data)) return value;
+          changed = true; return rememberEncoding(value, encoding);
+        });
+        return { ...preset, vibes };
+      });
+      if (changed) { await saveStyleLibrary(next); useStore.setState({ stylePresets: next }); }
+    });
+    libraryWrite = pending;
+    void pending.catch(() => toast.error(translateUI("The new Vibe encoding could not be saved to your preset library.")));
+  });
+}
 
 function checkAnlasBalance(cost: number, account: AccountInfo | null): boolean {
   const balance = account?.anlas;
@@ -180,7 +213,7 @@ export const useStore = create<Store>()((set, get) => ({
   connectionError: null,
   connect: async (cfg) => {
     cfg = { ...cfg, host: cfg.host.trim().replace(/\/+$/, ""), token: cfg.token.trim() };
-    const client = new NaiClient(cfg);
+    const client = newClient(cfg);
     set({ connection: cfg, client, account: null, paidAcknowledged: false, pendingPayment: null, connectionStatus: "verifying", connectionError: null });
     await get().refreshAccount();
     // An older request must not save credentials or close a newer connection attempt.
@@ -197,6 +230,28 @@ export const useStore = create<Store>()((set, get) => ({
 
   // ---- settings ----
   settings: DEFAULT_SETTINGS,
+  stylePresets: [],
+  styleStatus: "loading",
+  saveStylePresets: (presets) => {
+    const pending = libraryWrite.catch(() => {}).then(async () => {
+      const existing = get().stylePresets;
+      const next = [...existing.filter(item => !presets.some(incoming => incoming.id === item.id)), ...presets];
+      if (next.length > 200) throw new Error("The preset library can hold up to 200 presets.");
+      await saveStyleLibrary(next);
+      set({ stylePresets: next });
+    });
+    libraryWrite = pending;
+    return pending;
+  },
+  deleteStylePreset: (id) => {
+    const pending = libraryWrite.catch(() => {}).then(async () => {
+      const next = get().stylePresets.filter(item => item.id !== id);
+      await saveStyleLibrary(next);
+      set({ stylePresets: next });
+    });
+    libraryWrite = pending;
+    return pending;
+  },
   enhancement: null,
   beginEnhancement: (source) => {
     const factors = enhanceFactors(source, get().settings.model);
@@ -271,8 +326,10 @@ export const useStore = create<Store>()((set, get) => ({
     characters.splice(to, 0, character);
     return { settings: { ...s.settings, characters } };
   }),
-  addReference: (field, ref) =>
-    set((s) => ({ settings: { ...s.settings, [field]: [...s.settings[field], ref] } })),
+  addReference: (field, ref) => {
+    if (get().settings[field].length >= MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
+    set((s) => ({ settings: { ...s.settings, [field]: [...s.settings[field], ref] } }));
+  },
   updateReference: (field, i, patch) =>
     set((s) => ({
       settings: {
@@ -752,6 +809,8 @@ export const useStore = create<Store>()((set, get) => ({
   showPositions: false,
   imageEditor: null,
   imageImport: null,
+  showStyleLibrary: false,
+  styleImport: null,
   focusedIndex: null,
   setUI: (patch) => set(patch),
 
@@ -765,15 +824,21 @@ export const useStore = create<Store>()((set, get) => ({
     if (savedSettings) set({ settings: savedSettings });
     const savedUI = loadUIPrefs();
     if (savedUI) set(savedUI);
+    const initialReferences = get().settings;
+    const libraryReady = Promise.all([loadStyleLibrary(), loadReferenceSession()]).then(([stylePresets, references]) => {
+      const current = get().settings;
+      const untouched = current.vibe === initialReferences.vibe && current.directorReference === initialReferences.directorReference;
+      set({ stylePresets, styleStatus: "ready", ...(references && untouched ? { settings: { ...current, ...references } } : {}) });
+    }).catch(() => { set({ styleStatus: "error" }); });
 
     if (cfg) {
-      set({ connection: cfg, client: new NaiClient(cfg), account: null, connectionStatus: "verifying", connectionError: null });
-      await Promise.all([get().refreshAccount(), get().loadGallery()]);
+      set({ connection: cfg, client: newClient(cfg), account: null, connectionStatus: "verifying", connectionError: null });
+      await Promise.all([libraryReady, get().refreshAccount(), get().loadGallery()]);
       return;
     } else {
       set({ showConnect: true });
     }
-    await get().loadGallery();
+    await Promise.all([libraryReady, get().loadGallery()]);
   },
 }));
 
@@ -783,6 +848,9 @@ if (typeof window !== "undefined") {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: GenerationSettings | null = null;
   let lastUI = "";
+  let lastReferences: { vibe: ReferenceImage[]; directorReference: ReferenceImage[] } | null = null;
+  let referenceWrite: Promise<void> = Promise.resolve();
+  let storageWarning = false;
 
   useStore.subscribe((s) => {
     const uiKey = `${s.settingsCollapsed}|${s.activeTab}|${s.galleryOpen}|${s.combinedPrompts}`;
@@ -792,6 +860,14 @@ if (typeof window !== "undefined") {
     clearTimeout(timer);
     timer = setTimeout(() => {
       saveSettings(s.settings);
+      if (s.styleStatus === "ready" && (lastReferences?.vibe !== s.settings.vibe || lastReferences?.directorReference !== s.settings.directorReference)) {
+        const references = { vibe: s.settings.vibe, directorReference: s.settings.directorReference };
+        lastReferences = references;
+        referenceWrite = referenceWrite.catch(() => {}).then(() => saveReferenceSession(references)).catch(() => {
+          lastReferences = null;
+          if (!storageWarning) { toast.error(translateUI("References could not be saved. Export your Vibes before closing this page.")); storageWarning = true; }
+        });
+      }
       saveUIPrefs({
         settingsCollapsed: s.settingsCollapsed,
         activeTab: s.activeTab,

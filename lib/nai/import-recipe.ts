@@ -4,6 +4,7 @@ import { Model, Noise, Sampler } from "./protocol";
 import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, V5_FULL, V5_CURATED, type GenerationModel } from "./models";
 import { DEFAULT_SETTINGS, type CharacterSetting, type GenerationSettings } from "./types";
 import { MAX_GENERATION_DIMENSION, MAX_GENERATION_PIXELS } from "./dimensions";
+import { embeddedVibes, vibesFromMetadata } from "./vibes";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -282,9 +283,18 @@ export function recipeFromNovelAIMetadata(
     imported.add(`${characters.length} character${characters.length === 1 ? "" : "s"}`);
   }
 
-  const omittedReferences = [
-    pick(bag, "reference_image_multiple"),
-    pick(bag, "reference_strength_multiple"),
+  let omittedVibes = false;
+  try {
+    settings.vibe = embeddedVibes(entries);
+    if (!settings.vibe.length) settings.vibe = vibesFromMetadata({
+      reference_image_multiple: pick(bag, "reference_image_multiple"),
+      reference_strength_multiple: pick(bag, "reference_strength_multiple"),
+      reference_information_extracted_multiple: pick(bag, "reference_information_extracted_multiple"),
+    }, settings.model);
+    if (settings.vibe.length) imported.add(`${settings.vibe.length} Vibe reference(s)`);
+    omittedVibes = !settings.vibe.length && [pick(bag, "reference_image_multiple"), pick(bag, "reference_strength_multiple")].some(value => Array.isArray(value) && value.length > 0);
+  } catch { omittedVibes = true; }
+  const omittedReferences = omittedVibes || [
     pick(bag, "director_reference_images"),
     pick(bag, "director_reference_strength_values"),
   ].some((value) => Array.isArray(value) && value.length > 0);

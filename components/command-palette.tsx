@@ -91,7 +91,7 @@ export function CommandPalette() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
-        if (useStore.getState().imageImport) return;
+        if (useStore.getState().imageImport || useStore.getState().showStyleLibrary) return;
         e.preventDefault();
         if (open) close();
         else openPalette();
@@ -143,6 +143,15 @@ export function CommandPalette() {
         icon: <FileImage />,
         keywords: "load restore novelai metadata drop open file",
         run: go(pickRecipeFile),
+      },
+      {
+        id: "import-style",
+        label: translateUI("Import style / preset"),
+        hint: translateUI("Vibes, artist tags and saved prompts"),
+        group: "Actions",
+        icon: <FileImage />,
+        keywords: "vibe style artist preset import model 画风 模型 预设 导入",
+        run: go(() => s.setUI({ showStyleLibrary: true })),
       },
       {
         id: "reuse",

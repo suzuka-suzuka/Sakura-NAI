@@ -48,7 +48,7 @@ export async function prepareDirectorReference(base64: string) {
 type Entry = { keyword: string; text: string };
 const utf8 = new TextDecoder();
 const latin1 = new TextDecoder("latin1");
-const isNovelAI = (entries: Entry[]) => entries.some(e => /novelai|nai-diffusion/i.test(e.text) ||
+const isNovelAI = (entries: Entry[]) => entries.some(e => e.keyword.toLowerCase() === "naidata" || /novelai|nai-diffusion/i.test(e.text) ||
   e.keyword === "Comment" && /"(?:steps|v4_prompt|sampler|prompt|seed)"\s*:/.test(e.text));
 function hasPrompt(entries: Entry[]) {
   return entries.some(e => {

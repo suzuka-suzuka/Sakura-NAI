@@ -1,5 +1,7 @@
 import { base64ToBytes, bytesToBase64, type GenerationPayload } from "./protocol";
 import { extractImageMetadata } from "./media";
+import { exportVibes, vibesFromMetadata } from "./vibes";
+import { isV4Model, type GenerationModel } from "./models";
 
 export type MetadataEntry = { keyword: string; text: string };
 const utf8 = new TextEncoder();
@@ -31,10 +33,10 @@ function textChunk(entry: MetadataEntry) {
 }
 
 /** Replace text chunks by keyword, preserving the original IDAT bytes and their CRCs. */
-export function writePngMetadata(bytes: Uint8Array, entries: MetadataEntry[]) {
+export function writePngMetadata(bytes: Uint8Array, entries: MetadataEntry[], removeKeywords: string[] = []) {
   if (!pngSize(bytes)) throw new Error("Invalid PNG header");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const replaced = new Set(entries.map(entry => entry.keyword));
+  const replaced = new Set([...entries.map(entry => entry.keyword), ...removeKeywords]);
   const parts = [bytes.subarray(0, 8)];
   let ended = false;
   for (let offset = 8; offset + 12 <= bytes.length;) {
@@ -69,7 +71,8 @@ function commentObject(entries: MetadataEntry[]): Record<string, unknown> {
   } catch { return {}; }
 }
 
-// Explicit allowlist: input images, masks, encoded references, tokens and URLs never enter PNGs.
+// Explicit allowlist: input images, masks, precise-reference pixels, tokens and URLs never enter PNGs.
+// V4+ Vibe encodings are shared separately in the official naidata chunk.
 const parameterKeys = [
   "params_version", "steps", "scale", "sampler", "noise_schedule", "cfg_rescale", "n_samples",
   "dynamic_thresholding", "sm", "sm_dyn", "skip_cfg_above_sigma", "use_coords",
@@ -97,12 +100,15 @@ export async function generationPngMetadata(output: Uint8Array, payload: Generat
     request_width: payload.parameters.width, request_height: payload.parameters.height,
     ...(focused ? { focused: true } : {}),
   };
+  const references = isV4Model(payload.model as GenerationModel) ? vibesFromMetadata(payload.parameters, payload.model as GenerationModel) : [];
+  const embedded = references.length ? await exportVibes(references, payload.model as GenerationModel) : null;
   return writePngMetadata(output, [
     { keyword: "Software", text: "Sakura NAI (NovelAI compatible)" },
     { keyword: "Source", text: payload.model },
     { keyword: "Description", text: payload.input },
     { keyword: "Comment", text: JSON.stringify(comment) },
-  ]);
+    ...(embedded ? [{ keyword: "naidata", text: bytesToBase64(utf8.encode(embedded.text)) }] : []),
+  ], ["naidata"]);
 }
 
 /** Carry generation data through canvas edits. An ungenerated image stays without a recipe. */
@@ -113,7 +119,7 @@ export async function preserveCanvasMetadata(outputUrl: string, sourceUrl: strin
   const source = base64ToBytes(sourceUrl);
   const entries = await readEntries(source);
   // Never transfer authenticity signatures to changed pixels.
-  const retained = entries.filter(entry => ["Software", "Source", "Description", "Comment"].includes(entry.keyword));
+  const retained = entries.filter(entry => ["Software", "Source", "Description", "Comment", "naidata"].includes(entry.keyword));
   if (!retained.length) return outputUrl;
   const comment = commentObject(entries);
   if (edited) {

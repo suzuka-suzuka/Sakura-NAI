@@ -8,6 +8,7 @@ import { applyImageImport, pickOriginalRecipeFile, DEFAULT_RECIPE_IMPORT, type I
 import type { ImportedRecipe } from "@/lib/nai/import-recipe";
 import { recipeReproductionMessage } from "@/lib/nai/import-recipe";
 import { modelLabel } from "@/lib/nai/models";
+import { compatibleVibeModel } from "@/lib/nai/vibes";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 
@@ -24,7 +25,7 @@ export function ImageImportModal() {
 
 function ImportContent({ image, busy, close }: { image: ImageImportCandidate; busy: boolean; close: () => void }) {
   const [options, setOptions] = useState({ ...DEFAULT_RECIPE_IMPORT });
-  const hasSelection = [options.prompt, options.negativePrompt, options.characters, options.settings, options.seed].some(Boolean);
+  const hasSelection = [options.prompt, options.negativePrompt, options.characters, options.settings, options.seed, options.vibes && image.recipe?.settings.vibe.length].some(Boolean);
   const choices: { purpose: ImageImportPurpose; title: string; icon: typeof Palette; disabled?: boolean }[] = [
     { purpose: "recipe", title: t("Import image parameters"),
       icon: FileSliders, disabled: !image.recipe || !hasSelection },
@@ -66,16 +67,25 @@ function ParameterImport({ busy, recipe, options, setOptions }: {
   busy: boolean; recipe: ImportedRecipe; options: RecipeImportOptions;
   setOptions: React.Dispatch<React.SetStateAction<RecipeImportOptions>>;
 }) {
+  const current = useStore(state => state.settings);
+  let vibeModel = "";
+  if (options.vibes && recipe.settings.vibe.length) {
+    try { vibeModel = compatibleVibeModel([...(options.append && !options.clean ? current.vibe : []), ...recipe.settings.vibe], options.settings ? recipe.settings.model : current.model); }
+    catch { /* The apply action reports incompatible combinations without changing the draft. */ }
+  }
   const warning = recipeReproductionMessage(recipe);
   const fields: { key: keyof RecipeImportOptions; label: string }[] = [
     { key: "prompt", label: "Prompt" }, { key: "negativePrompt", label: "Undesired content" },
     { key: "characters", label: "Characters" }, { key: "settings", label: "Settings" }, { key: "seed", label: "Seed" },
-    { key: "append", label: "Append prompts and characters" }, { key: "clean", label: "Start from default settings" },
+    ...(recipe.settings.vibe.length ? [{ key: "vibes" as const, label: "Embedded Vibes" }] : []),
+    { key: "append", label: recipe.settings.vibe.length ? "Append prompts, characters and Vibes" : "Append prompts and characters" }, { key: "clean", label: "Start from default settings" },
   ];
   return <div className="mb-4 space-y-3 rounded-[var(--radius-card)] border border-border-soft p-3">
     <p className="text-xs font-semibold text-accent">{t("Generation parameters found")}</p>
     {warning && <p role="note" className="text-xs leading-relaxed text-amber-600 dark:text-amber-400">{t(warning)}</p>}
     {recipe.omittedReferences && <p className="text-xs leading-relaxed text-muted">{t("Parameters can be imported. To reuse the original reference images, upload those files separately.")}</p>}
+    {recipe.settings.vibe.length > 0 && <p className="text-xs leading-relaxed text-accent">{t("Found {0} embedded Vibe(s). Their saved encodings can be reused without an encoding charge.", recipe.settings.vibe.length)}</p>}
+    {vibeModel && vibeModel !== current.model && <p className="text-xs text-muted">{t("Importing these Vibes will switch to {0}.", modelLabel(vibeModel, true))}</p>}
     {recipe.imageSettings && <p className="text-xs text-muted">{t("Saved image settings: strength {0}, noise {1}", recipe.imageSettings.mode === "infill" ? recipe.imageSettings.inpaintStrength : recipe.imageSettings.strength, recipe.imageSettings.noise)}</p>}
     <details className="text-xs">
       <summary className="cursor-pointer py-1 text-fg-2">{t("Preview parameters")}</summary>
@@ -91,7 +101,7 @@ function ParameterImport({ busy, recipe, options, setOptions }: {
     <p className="text-xs text-muted">{t("Choose metadata to import")}</p>
     <div className="flex flex-wrap gap-x-4 gap-y-2">
       {fields.map(({ key, label }) => <label key={key} className="flex items-center gap-1.5 text-xs">
-        <input type="checkbox" checked={options[key]} disabled={busy} className="accent-accent" onChange={event => setOptions(previous => ({ ...previous, [key]: event.target.checked }))} />{t(label)}
+        <input type="checkbox" checked={options[key] ?? false} disabled={busy} className="accent-accent" onChange={event => setOptions(previous => ({ ...previous, [key]: event.target.checked }))} />{t(label)}
       </label>)}
     </div>
   </div>;

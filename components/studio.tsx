@@ -6,6 +6,7 @@ import { PanelLeftOpen, Images } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useCompactLayout } from "@/lib/use-compact-layout";
 import { PaymentConfirmModal } from "./payment-confirm-modal";
+import { StyleLibraryModal } from "./style-library-modal";
 import { CharacterPositions } from "./canvas/character-positions";
 import { ImageEditor } from "./canvas/image-editor";
 import { ConnectModal } from "./connect-modal";
@@ -57,7 +58,7 @@ export function Studio({ connectionOptions }: { connectionOptions: ConnectionOpt
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
-      if (s.showConnect || s.showDirector || s.pendingPayment || s.isPreparing || s.focusedIndex !== null || s.imageEditor || s.imageImport) return;
+      if (s.showConnect || s.showDirector || s.showStyleLibrary || s.pendingPayment || s.isPreparing || s.focusedIndex !== null || s.imageEditor || s.imageImport) return;
 
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -188,6 +189,7 @@ export function Studio({ connectionOptions }: { connectionOptions: ConnectionOpt
       </div>
 
       <PaymentConfirmModal />
+      <StyleLibraryModal />
       <ConnectModal connectionOptions={connectionOptions} />
       <DirectorModal />
       <ImageEditor />

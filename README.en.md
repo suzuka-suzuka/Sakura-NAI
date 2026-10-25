@@ -20,10 +20,12 @@ Run Sakura NAI locally on Windows or host it on a Linux server. The browser call
 - **Anlas display:** costs appear on the generation button and relevant image tools. An optional confirmation appears when switching from free to paid generation. Calculations use account status; API-side billing is authoritative.
 - **Image workflows:** image-to-image, inpainting, enhancement, variations, 2× upscaling, and image tools. Enhance shows strength/noise by default, offers five magnitude levels in advanced settings, and supports V5 Max; sidebar settings remain editable and pricing follows the effective enhancement request. Reference and Vibe Transfer support depends on the model; V5 currently does not support Vibe or precise references.
 - **Local gallery:** a single-column history, fullscreen previews, PNG downloads, ZIP export, and undo for deletion. Selecting an image previews it; reusing its parameters is a separate action. Import parameters from NovelAI PNGs.
+- **Styles and presets:** **Import style / preset** is always visible beneath the model selector. Import official `.naiv4vibe` files and bundles, Sakura preset JSON, or plain text artist/prompt tags; drag-and-drop works too. Preview before appending, replacing, or saving to the local library. Vibe apply buttons disclose model changes. Save, rename, export, and reuse prompts, complete generation settings, or Vibe setups. Generation presets exclude image inputs, masks, and references.
+- **Reusable Vibe encodings:** import cached encodings from Vibe files and PNG `naidata`, and reuse them only with the corresponding model and extraction value. Encoding-only references cannot request arbitrary extraction values. Newly encoded references and matching saved Vibe setups retain their encodings in IndexedDB across reloads. Up to 16 Vibes can be used at once.
 - **Image and mask editors:** wheel zoom anchors at the pointer and Space/middle-button drag pans. Round, soft round, and square brushes keep a constant size on screen. Soft coverage survives saving, reopening, and canvas resizing. Expanding the image editor keeps Image2Image mode; expanding the mask editor automatically selects new space for outpainting. Layers, masks, and dimensions support undo/redo. Inpainting output resolution remains editable.
 - **Focused inpainting and Variety+:** generate details around a mask at the selected resolution and composite them into the full source. Ordinary and focused inpainting derive separate request and soft composite masks, blend around the selection, and preserve pixels beyond the blend region. Selected transparent outpainting pixels receive full coverage. Pricing uses the detail request dimensions. V4.5 and earlier models expose Variety+ without an extra charge; V5 hides it.
 - **Dropped image choices:** drop PNG, JPEG, WebP, or other browser-supported images, then choose parameter import, Image2Image base, Vibe Transfer, or character reference. Parameter import requires readable NovelAI settings. Base images preserve current prompts; either reference option switches to V4.5 Full and adds the image to its list. Fixed-purpose file picker buttons still import directly. Imports and local edits consume no Anlas.
-- **Image metadata:** PNG uploads keep their original pixels and metadata. Cropping, expanding, and saving either editor keeps the base image's existing generation recipe; drawing exports keep it too. Final Image2Image, ordinary inpainting, and focused inpainting PNGs record the effective request even when the input is a metadata-free collage. Output and request dimensions are recorded separately, without embedding base images, masks, or references.
+- **Image metadata:** PNG uploads keep their original pixels and metadata. Cropping, expanding, and saving either editor keeps the base image's existing generation recipe; drawing exports keep it too. Final Image2Image, ordinary inpainting, and focused inpainting PNGs record the effective request even when the input is a metadata-free collage. V4/V4.5 Vibe encodings are saved in the official-compatible `naidata` chunk. Original base images, masks, and reference pixels are not embedded.
 - **Selective parameter import:** dropping an image or opening the generic image picker offers separate choices for prompts, undesired content, characters, sampling settings, and seed, plus append and reset-to-defaults options. Images generated with Image2Image/inpainting or edited locally explain their reproduction limits; inpainting also needs the original base and mask.
 - **Sakura identity:** a five-petal blossom, pink light mode, warm plum dark mode, Chinese/English UI, and alternate accent colors. Persistent desktop controls and mobile drawers.
 
@@ -31,7 +33,7 @@ The empty canvas offers **Girl among blossoms**, **Sakura Miko**, and **Moonlit 
 
 ## Importing images on iPhone / iPad
 
-When the import dialog says **Generation parameters found**, expand **Preview parameters** to inspect the prompt and seed, then select **Import image parameters**. A notice about separately uploading reference images means the original reference files are not embedded in the result; it does not prevent importing the saved parameters.
+When the import dialog says **Generation parameters found**, expand **Preview parameters** to inspect the prompt and seed, then select **Import image parameters**. Embedded Vibe encodings can be selected independently. Precise references or references without saved encodings still require their original files; this does not block prompt or parameter import.
 
 Import supports PNG text and hidden alpha metadata, plus NovelAI EXIF metadata retained in WebP, JPEG, and PNG files. If no parameters are found, use **Choose original file** to select the original download from Files. Photo conversion, screenshots, or messaging apps may remove metadata; missing parameters cannot be reconstructed from the picture. Use the website's download button to keep the original file.
 
@@ -133,6 +135,7 @@ On macOS, Command also works in place of Ctrl. Brackets do not toggle panels whi
 | --- | --- |
 | API token, host, settings, and preferences | Browser localStorage |
 | Generated images and their generation settings | Browser IndexedDB |
+| Style/prompt/settings presets, active references and Vibe encodings | Separate browser IndexedDB preset library |
 | Prompts, reference images, and generation requests | Sent directly to NovelAI or the configured API host |
 | Application shell and static assets | Your local service or deployed server |
 
@@ -143,6 +146,8 @@ Internal storage keys and the gallery database name are retained from earlier ve
 ## Development
 
 Built with **Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand, and IndexedDB**.
+
+Presets and Vibes stay in the current browser. Export preset JSON or encoded Vibe files to transfer or back them up. JSON imports support Sakura's versioned preset format; other tools' artist/prompt tags can be imported as plain text. Importing, saving, and exporting does not make paid requests. New reference encodings or new model/extraction combinations are included in the generation cost estimate.
 
 | Directory | Responsibility |
 | --- | --- |
