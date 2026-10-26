@@ -39,6 +39,10 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
   const [active, setActive] = useState(1), [tool, setTool] = useState<Tool>("brush"), [size, setSize] = useState(20), [color, setColor] = useState("#222222");
   const [brushShape, setBrushShape] = useState<"round" | "soft" | "square">("round");
   const [brushOpacity, setBrushOpacity] = useState(100);
+  const [maskDisplayOpacity, setMaskDisplayOpacity] = useState(55);
+  const opacityLabel = t(mode === "mask" ? "Mask display opacity" : "Brush opacity");
+  const opacity = mode === "mask" ? maskDisplayOpacity : brushOpacity;
+  const overlayOpacity = mode === "mask" ? maskDisplayOpacity / 100 : 1;
   const square = brushShape === "square";
   const [initial] = useState(() => {
     const input = source && settings.imageSource?.dataUrl === source ? settings.imageSource : null;
@@ -129,7 +133,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
     strokeCtx.clearRect(0, 0, w, h); strokeCtx.stroke();
     // Composite the whole stroke once; repeated pointer events must not harden its soft edge.
     ctx.putImageData(g.before, 0, 0); ctx.save();
-    ctx.globalAlpha = brushOpacity / 100;
+    ctx.globalAlpha = mode === "mask" ? 1 : brushOpacity / 100;
     ctx.filter = brushShape === "soft" ? `blur(${brushSize * 0.15}px)` : "none";
     ctx.drawImage(stroke, 0, 0); ctx.restore();
   };
@@ -254,7 +258,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
         <span className="text-xs font-semibold">{t(mode === "mask" ? "Draw mask" : "Draw")}</span>
         {mode === "draw" && <input type="color" aria-label={t("Brush color")} value={color} onChange={e=>setColor(e.target.value)} className="h-8 w-12 bg-transparent" />}
         <label className="text-xs">{t("Pen size")} <input type="number" min={1} max={300} value={size} onChange={e=>setSize(Math.max(1,Math.min(300,Number(e.target.value))))} className="w-12 bg-bg px-1" /><input type="range" min={1} max={300} value={size} onChange={e=>setSize(Number(e.target.value))} aria-label={t("Pen size")} className="mt-2 block w-32 accent-accent" /></label>
-        <label className="text-xs">{t("Brush opacity")} <span className="tabular-nums">{brushOpacity}%</span><input type="range" min={1} max={100} step={1} value={brushOpacity} onChange={e=>setBrushOpacity(Number(e.target.value))} aria-label={t("Brush opacity")} aria-valuetext={`${brushOpacity}%`} className="mt-2 block w-32 accent-accent" /></label>
+        <label className="text-xs">{opacityLabel} <span className="tabular-nums">{opacity}%</span><input type="range" min={mode === "mask" ? 0 : 1} max={100} step={1} value={opacity} onChange={e=>(mode === "mask" ? setMaskDisplayOpacity : setBrushOpacity)(Number(e.target.value))} aria-label={opacityLabel} aria-valuetext={`${opacity}%`} className="mt-2 block w-32 accent-accent" /></label>
         <label className="text-xs">{t("Brush shape")} <select aria-label={t("Brush shape")} value={brushShape} onChange={e=>setBrushShape(e.target.value as typeof brushShape)} className="ml-1 rounded border border-border-soft bg-bg px-1 py-1">
           <option value="round">{t("Round brush")}</option><option value="soft">{t("Soft round brush")}</option><option value="square">{t("Square brush")}</option>
         </select></label>
@@ -275,7 +279,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
         onPointerDown={e => { if (e.target === e.currentTarget && (e.button === 1 || tool === "hand" || space)) { e.preventDefault(); viewportStartPan(e); } }} onPointerMove={e => { if (e.target === e.currentTarget) viewportMovePan(e); }} onPointerUp={viewportEndPan} onPointerCancel={viewportEndPan}>
         <div className="checkerboard absolute" style={viewportStyle}>
           {mode === "mask" && base && <img src={base} alt="" className="pointer-events-none absolute inset-0 h-full w-full" />}
-          {layers.map(layer=>layer.id===active ? <canvas key={layer.id} ref={canvas} width={w} height={h} aria-label={t("Drawing canvas")} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={()=>setCursor(null)} className="absolute inset-0 h-full w-full touch-none" style={{opacity:layer.visible?layer.opacity*(mode==="mask"?0.55:1):0,zIndex:layers.indexOf(layer)+1,cursor:tool==="hand"||space?viewportPanning?"grabbing":"grab":tool==="brush"||tool==="eraser"?"none":"crosshair"}} /> : layer.visible&&layer.url ? <img key={layer.id} src={layer.url} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{opacity:layer.opacity,zIndex:layers.indexOf(layer)+1}} /> : null)}
+          {layers.map(layer=>layer.id===active ? <canvas key={layer.id} ref={canvas} width={w} height={h} aria-label={t("Drawing canvas")} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={()=>setCursor(null)} className="absolute inset-0 h-full w-full touch-none" style={{opacity:layer.visible?layer.opacity*overlayOpacity:0,zIndex:layers.indexOf(layer)+1,cursor:tool==="hand"||space?viewportPanning?"grabbing":"grab":tool==="brush"||tool==="eraser"?"none":"crosshair"}} /> : layer.visible&&layer.url ? <img key={layer.id} src={layer.url} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{opacity:layer.opacity*overlayOpacity,zIndex:layers.indexOf(layer)+1}} /> : null)}
           {cursor && !space && !viewportPanning && (tool === "brush" || tool === "eraser") && <div aria-hidden data-brush-outline className="pointer-events-none absolute z-40 border border-white shadow-[0_0_0_1px_#222]" style={{ left: cursor.x / w * 100 + "%", top: cursor.y / h * 100 + "%", width: brushSize / w * 100 + "%", height: brushSize / h * 100 + "%", transform: "translate(-50%, -50%)", borderRadius: square ? 0 : "50%", borderWidth: 1 / viewportZoom }} />}
           {(mode === "mask" || tool === "frame") && <div className="pointer-events-none absolute z-50 border-2 border-accent" style={{ left: (frame?.x ?? 0) / w * 100 + "%", top: (frame?.y ?? 0) / h * 100 + "%", width: (frame?.width ?? w) / w * 100 + "%", height: (frame?.height ?? h) / h * 100 + "%", borderWidth: 1 / viewportZoom }}>
             {frame && <span className="absolute bottom-full left-0 whitespace-nowrap bg-bg px-2 py-1 text-xs" style={{ transformOrigin: "bottom left", transform: `scale(${1 / viewportZoom})` }}>{frame.width} × {frame.height}</span>}
