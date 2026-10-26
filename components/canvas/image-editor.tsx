@@ -38,6 +38,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
   const [layers, setLayers] = useState<Layer[]>([{ id: 1, name: t(mode === "mask" ? "Mask" : "Layer") + " 1", url: "", visible: true, opacity: 1 }]);
   const [active, setActive] = useState(1), [tool, setTool] = useState<Tool>("brush"), [size, setSize] = useState(20), [color, setColor] = useState("#222222");
   const [brushShape, setBrushShape] = useState<"round" | "soft" | "square">("round");
+  const [brushOpacity, setBrushOpacity] = useState(100);
   const square = brushShape === "square";
   const [initial] = useState(() => {
     const input = source && settings.imageSource?.dataUrl === source ? settings.imageSource : null;
@@ -128,6 +129,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
     strokeCtx.clearRect(0, 0, w, h); strokeCtx.stroke();
     // Composite the whole stroke once; repeated pointer events must not harden its soft edge.
     ctx.putImageData(g.before, 0, 0); ctx.save();
+    ctx.globalAlpha = brushOpacity / 100;
     ctx.filter = brushShape === "soft" ? `blur(${brushSize * 0.15}px)` : "none";
     ctx.drawImage(stroke, 0, 0); ctx.restore();
   };
@@ -252,6 +254,7 @@ function EditorSession({ mode, source }: { mode: "draw" | "mask"; source: string
         <span className="text-xs font-semibold">{t(mode === "mask" ? "Draw mask" : "Draw")}</span>
         {mode === "draw" && <input type="color" aria-label={t("Brush color")} value={color} onChange={e=>setColor(e.target.value)} className="h-8 w-12 bg-transparent" />}
         <label className="text-xs">{t("Pen size")} <input type="number" min={1} max={300} value={size} onChange={e=>setSize(Math.max(1,Math.min(300,Number(e.target.value))))} className="w-12 bg-bg px-1" /><input type="range" min={1} max={300} value={size} onChange={e=>setSize(Number(e.target.value))} aria-label={t("Pen size")} className="mt-2 block w-32 accent-accent" /></label>
+        <label className="text-xs">{t("Brush opacity")} <span className="tabular-nums">{brushOpacity}%</span><input type="range" min={1} max={100} step={1} value={brushOpacity} onChange={e=>setBrushOpacity(Number(e.target.value))} aria-label={t("Brush opacity")} aria-valuetext={`${brushOpacity}%`} className="mt-2 block w-32 accent-accent" /></label>
         <label className="text-xs">{t("Brush shape")} <select aria-label={t("Brush shape")} value={brushShape} onChange={e=>setBrushShape(e.target.value as typeof brushShape)} className="ml-1 rounded border border-border-soft bg-bg px-1 py-1">
           <option value="round">{t("Round brush")}</option><option value="soft">{t("Soft round brush")}</option><option value="square">{t("Square brush")}</option>
         </select></label>
