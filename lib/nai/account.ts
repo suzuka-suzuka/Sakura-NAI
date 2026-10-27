@@ -1,4 +1,5 @@
 import { parseAccount, type AccountInfo } from "./cost";
+import { createAbortScope } from "./abort";
 
 export class AccountQueryError extends Error {
   constructor(message: string, readonly status?: number) { super(message); }
@@ -14,11 +15,12 @@ export async function queryAccount(cfg: { host: string; token: string }): Promis
   } catch {
     throw new AccountQueryError("Enter a valid HTTP or HTTPS host URL without query parameters.");
   }
+  const scope = createAbortScope([], 8000);
   try {
     // Do not retry or follow redirects while checking credentials. Use exactly the configured host.
     const response = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(8000), cache: "no-store", redirect: "error",
+      signal: scope.signal, cache: "no-store", redirect: "error",
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
@@ -37,8 +39,8 @@ export async function queryAccount(cfg: { host: string; token: string }): Promis
     }
   } catch (error) {
     if (error instanceof AccountQueryError) throw error;
-    throw new AccountQueryError(error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
+    throw new AccountQueryError(scope.signal.aborted || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))
       ? "Connection timed out. Try again."
       : "Cannot reach the server. Check the address, network and allowed origins.");
-  }
+  } finally { scope.dispose(); }
 }

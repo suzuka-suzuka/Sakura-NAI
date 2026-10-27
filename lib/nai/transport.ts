@@ -1,16 +1,27 @@
 import { decode } from "@msgpack/msgpack";
 import JSZip from "jszip";
 import { EventType, Image, type MsgpackEvent, type GenerationPayload } from "./protocol";
+import { abortReason, createAbortScope, throwIfAborted } from "./abort";
 
 type Connection = { host: string; token: string; maxRetries: number; baseDelay: number };
 const TIMEOUT = 120_000;
 
 export class NaiTransport {
   constructor(private readonly config: Connection) {}
-  async request(path: string, body?: unknown, signal?: AbortSignal, accept = "application/zip, application/json"): Promise<Response> {
+  // Consume the body before disposing; fetch resolves as soon as headers arrive.
+  async request<T>(path: string, read: (response: Response) => Promise<T>, body?: unknown, signal?: AbortSignal, accept = "application/zip, application/json"): Promise<T> {
+    const scope = createAbortScope([signal], TIMEOUT);
+    try {
+      return await read(await this.fetchResponse(path, body, scope.signal, accept));
+    } catch (error) {
+      throwIfAborted(scope.signal);
+      throw error;
+    } finally { scope.dispose(); }
+  }
+  private async fetchResponse(path: string, body: unknown, requestSignal: AbortSignal, accept: string): Promise<Response> {
     const cfg = this.config;
-    const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT)]) : AbortSignal.timeout(TIMEOUT);
     for (let attempt = 0;; attempt++) {
+      throwIfAborted(requestSignal);
       const response = await fetch(`${cfg.host.replace(/\/+$/, "")}${path}`, {
         method: body === undefined ? "GET" : "POST",
         headers: { Authorization: `Bearer ${cfg.token}`, Accept: accept, ...(body === undefined || body instanceof FormData ? {} : { "Content-Type": "application/json" }) },
@@ -24,7 +35,7 @@ export class NaiTransport {
         const delay = Math.min(60000, Math.max(cfg.baseDelay * 2 ** attempt, retryAfter * 1000));
         await response.body?.cancel();
         await new Promise<void>((resolve, reject) => {
-          const abort = () => { clearTimeout(timer); reject(requestSignal.reason); };
+          const abort = () => { clearTimeout(timer); requestSignal.removeEventListener("abort", abort); reject(abortReason(requestSignal)); };
           const timer = setTimeout(() => { requestSignal.removeEventListener("abort", abort); resolve(); }, delay);
           requestSignal.addEventListener("abort", abort, { once: true });
           if (requestSignal.aborted) abort();
@@ -36,21 +47,23 @@ export class NaiTransport {
     }
   }
   async images(path: string, body: unknown, signal?: AbortSignal) {
-    return decodeImages(await this.request(path, body, signal));
+    return this.request(path, decodeImages, body, signal);
   }
   async *generate(payload: GenerationPayload, streaming: boolean, signal?: AbortSignal): AsyncGenerator<MsgpackEvent> {
-    const controller = new AbortController();
-    const combined = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+    const scope = createAbortScope([signal], TIMEOUT);
     try {
       if (!streaming) {
-        const images = await this.images("/ai/generate-image", payload, combined);
+        const images = await decodeImages(await this.fetchResponse("/ai/generate-image", payload, scope.signal, "application/zip, application/json"));
         if (images.length !== Number(payload.parameters.n_samples)) throw new Error("Unexpected number of generated images");
         for (const [samp_ix, image] of images.entries()) yield { event_type: EventType.FINAL, samp_ix, step_ix: Number(payload.parameters.steps), image };
         return;
       }
-      const response = await this.request("/ai/generate-image-stream", payload, combined, "application/x-msgpack, text/event-stream");
+      const response = await this.fetchResponse("/ai/generate-image-stream", payload, scope.signal, "application/x-msgpack, text/event-stream");
       yield* decodeStream(response, Number(payload.parameters.n_samples));
-    } finally { controller.abort(); }
+    } catch (error) {
+      throwIfAborted(scope.signal);
+      throw error;
+    } finally { scope.dispose(); }
   }
 }
 

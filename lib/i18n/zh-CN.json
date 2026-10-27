@@ -604,7 +604,6 @@
   "Preview parameters": "查看已读取的参数",
   "Empty": "空",
   "Choose original file": "重新选择原始文件",
-  "On iPhone or iPad, choose the original download from Files. Photos, screenshots, and messaging apps may remove generation parameters.": "iPhone／iPad 请从「文件」选取下载的原图；相册转码、截图或聊天软件转发可能移除生成参数。",
   "The image is too large to import on this device.": "图片过大，当前设备无法处理，请选择较小的图片。",
   "Styles and presets": "画风与预设",
   "Import style / preset": "导入画风 / 预设",

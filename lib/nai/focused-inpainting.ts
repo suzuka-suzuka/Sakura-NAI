@@ -2,14 +2,15 @@ import type { GenerationSettings } from "./types";
 import { focusedCrop } from "../editor-geometry";
 import { prepareInpainting } from "./image-input";
 import { compositeInpainting } from "./inpainting-composite";
+import { throwIfAborted } from "./abort";
 
 /** Prepare a detail crop with the same soft composite mask as ordinary inpainting. */
 export async function prepareFocusedInpainting(s: GenerationSettings, signal?: AbortSignal) {
   const source = s.imageSource;
   if (source?.mode !== "infill" || !source.focused) return null;
-  signal?.throwIfAborted();
+  throwIfAborted(signal);
   if (!source.mask) throw new Error("Draw an inpainting mask first");
-  const decode = async (url: string) => { const image = new Image(); image.src = url; await image.decode(); signal?.throwIfAborted(); return image; };
+  const decode = async (url: string) => { const image = new Image(); image.src = url; await image.decode(); throwIfAborted(signal); return image; };
   const [original, maskImage] = await Promise.all([decode(source.dataUrl), decode(source.mask)]);
   const canvas = (width: number, height: number) => {
     const c = document.createElement("canvas"); c.width = width; c.height = height;
@@ -49,6 +50,6 @@ export async function prepareFocusedInpainting(s: GenerationSettings, signal?: A
     result.ctx.putImageData(replacement, crop.x, crop.y);
     return result.c.toDataURL("image/png");
   };
-  signal?.throwIfAborted();
+  throwIfAborted(signal);
   return { settings: inpainting.settings, compose };
 }

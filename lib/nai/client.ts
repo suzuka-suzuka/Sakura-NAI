@@ -1,6 +1,7 @@
 import { Host, Model, EventType, EmotionOptions, bytesToBase64, base64ToBytes, Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
 import { parseImage, prepareDirectorReference } from "./media";
 import { NaiTransport } from "./transport";
+import { throwIfAborted } from "./abort";
 import { queryAccount } from "./account";
 import { buildPayload } from "./payload";
 import { prepareInpainting } from "./image-input";
@@ -155,7 +156,7 @@ export class NaiClient {
       const focused = await prepareFocusedInpainting(settings, controller.signal);
       const inpainting = focused ?? await prepareInpainting(settings, controller.signal);
       const prepared = inpainting.settings;
-      controller.signal.throwIfAborted();
+      throwIfAborted(controller.signal);
       const payload = buildPayload(prepared, seed);
       const streaming = preview && supportsStreaming(settings.model);
       if (!streaming) delete payload.parameters.stream;
@@ -204,8 +205,8 @@ export class NaiClient {
         const key = JSON.stringify([s.model, ref.informationExtracted, ref.base64]);
         let encoded = vibeEncoding(ref, s.model)?.data ?? this.vibes.get(key);
         if (!encoded) {
-          const res = await this.transport.request("/ai/encode-vibe", { image: ref.base64, model: s.model, information_extracted: ref.informationExtracted }, signal, "application/octet-stream");
-          encoded = bytesToBase64(new Uint8Array(await res.arrayBuffer()));
+          const bytes = await this.transport.request("/ai/encode-vibe", res => res.arrayBuffer(), { image: ref.base64, model: s.model, information_extracted: ref.informationExtracted }, signal, "application/octet-stream");
+          encoded = bytesToBase64(new Uint8Array(bytes));
           if (!encoded) throw new Error("The server returned an empty encoded vibe");
           if (this.vibes.size >= 32) this.vibes.delete(this.vibes.keys().next().value!);
           this.vibes.set(key, encoded);
@@ -221,8 +222,7 @@ export class NaiClient {
 
   async suggestTags(prompt: string, model: GenerationModel = DEFAULT_SETTINGS.model): Promise<TagSuggestion[]> {
     const query = new URLSearchParams({ model, prompt, lang: "en" });
-    const res = await this.transport.request(`/ai/generate-image/suggest-tags?${query}`);
-    const data = await res.json() as { tags?: TagSuggestion[] } | TagSuggestion[];
+    const data = await this.transport.request(`/ai/generate-image/suggest-tags?${query}`, res => res.json()) as { tags?: TagSuggestion[] } | TagSuggestion[];
     return Array.isArray(data) ? data : data.tags ?? [];
   }
   private async augment(img: ImageInput, req_type: string, extra: Record<string, unknown> = {}) {

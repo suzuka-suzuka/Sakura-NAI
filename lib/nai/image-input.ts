@@ -2,6 +2,7 @@ import type { GenerationPayload } from "./protocol";
 import type { GenerationSettings } from "./types";
 import { isV5Model } from "./models";
 import { compositeInpainting, prepareInpaintingMasks } from "./inpainting-composite";
+import { throwIfAborted } from "./abort";
 
 const imageBytes = (url: string) => url.replace(/^data:image\/[^;]+;base64,/, "");
 
@@ -36,12 +37,12 @@ export function applyImageInput(payload: GenerationPayload, s: GenerationSetting
 
 /** Match the base image to the request canvas; resize infill mask coverage alongside it. */
 export async function prepareImageInput(s: GenerationSettings, signal?: AbortSignal): Promise<GenerationSettings> {
-  signal?.throwIfAborted();
+  throwIfAborted(signal);
   const source = s.imageSource;
   if (!source || (source.width === s.width && source.height === s.height)) return s;
   const resize = async (url: string) => {
     const image = new Image(); image.src = url; await image.decode();
-    signal?.throwIfAborted();
+    throwIfAborted(signal);
     const canvas = document.createElement("canvas"); canvas.width = s.width; canvas.height = s.height;
     const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Unable to prepare image input");
     ctx.imageSmoothingEnabled = true;
@@ -53,7 +54,7 @@ export async function prepareImageInput(s: GenerationSettings, signal?: AbortSig
     resize(source.dataUrl),
     source.mode === "infill" ? resize(source.mask!) : source.mask,
   ]);
-  signal?.throwIfAborted();
+  throwIfAborted(signal);
   return { ...s, imageSource: { ...source, dataUrl, mask, width: s.width, height: s.height } };
 }
 
@@ -63,7 +64,7 @@ export async function prepareInpainting(s: GenerationSettings, signal?: AbortSig
   if (source?.mode !== "infill") return { settings };
   if (!source.mask) throw new Error("Draw an inpainting mask first");
   const decode = async (url: string) => {
-    const image = new Image(); image.src = url; await image.decode(); signal?.throwIfAborted(); return image;
+    const image = new Image(); image.src = url; await image.decode(); throwIfAborted(signal); return image;
   };
   const canvas = () => {
     const c = document.createElement("canvas"); c.width = settings.width; c.height = settings.height;

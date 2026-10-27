@@ -92,7 +92,7 @@ test("ZIP and JSON image responses are decoded in sample order; empty archives f
 test("request transport uses configured auth/host and never replays ambiguous 500 failures", async (t) => {
   const calls: [string, RequestInit | undefined][] = [];
   t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => { calls.push([url, init]); return new Response("error test-token", { status: 500 }); });
-  await assert.rejects(new NaiTransport({ ...conn, maxRetries: 3 }).request("/ai/generate-image", {}), /\[redacted\]/);
+  await assert.rejects(new NaiTransport({ ...conn, maxRetries: 3 }).request("/ai/generate-image", res => res.text(), {}), /\[redacted\]/);
   assert.equal(calls.length, 1); assert.equal(calls[0][0], "https://example.invalid/ai/generate-image");
   assert.equal((calls[0][1]?.headers as Record<string,string>).Authorization, "Bearer test-token");
 });

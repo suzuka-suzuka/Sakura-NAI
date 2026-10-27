@@ -46,7 +46,6 @@ function ImportContent({ image, busy, close }: { image: ImageImportCandidate; bu
       {image.recipe ? <ParameterImport busy={busy} recipe={image.recipe} options={options} setOptions={setOptions} /> :
         <div className="mb-4 space-y-2 text-xs leading-relaxed text-muted">
           <p>{t(image.metadataError ? "The image is readable, but its generation metadata could not be read." : "This image has no generation metadata. You can still use it as a base or reference image.")}</p>
-          <p>{t("On iPhone or iPad, choose the original download from Files. Photos, screenshots, and messaging apps may remove generation parameters.")}</p>
           <Button variant="outline" size="sm" disabled={busy} onClick={pickOriginalRecipeFile}>{t("Choose original file")}</Button>
         </div>}
       <div className="grid gap-2 sm:grid-cols-2">
