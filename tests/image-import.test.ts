@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { zlibSync } from "fflate";
 import { toast } from "sonner";
 import { useStore } from "../lib/store";
-import { prepareImageImport, applyImageImport, importRecipeFile, DEFAULT_RECIPE_IMPORT } from "../lib/recipe-import";
+import { prepareImageImport, applyImageImport, importRecipeFile, selectedRecipeSettings, DEFAULT_RECIPE_IMPORT } from "../lib/recipe-import";
+import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
+import { cleanImportedTags } from "../lib/nai/clean-imported-tags";
 import { DEFAULT_SETTINGS } from "../lib/nai/types";
 import { Model } from "../lib/nai/protocol";
 import { V5_FULL, V5_CURATED } from "../lib/nai/models";
@@ -58,7 +60,7 @@ test("only selecting parameter import restores embedded settings", async t => {
   assert.equal(s.settings.prompt, "saved prompt");
   assert.equal(s.settings.negativePrompt, "saved negative");
   assert.equal(s.settings.steps, 22);
-  assert.equal(s.settings.seed, 42);
+  assert.equal(s.settings.seed, -1);
   assert.equal(s.settings.model, Model.V4_5_CUR);
   assert.equal(s.settings.imageSource, null);
   assert.equal(s.imageImport, null);
@@ -198,7 +200,7 @@ test("the direct-import helper still applies recipes and base images without a d
   assert.equal(useStore.getState().imageImport, null);
 });
 
-test("selected metadata import preserves unchecked drafts, seed, sampling and image inputs", async t => {
+test("selected metadata import preserves unchecked drafts and inputs but resets a pinned seed to random", async t => {
   decodeImages(t);
   const source = { dataUrl: "original", width: 64, height: 64, mode: "img2img" as const, strength: 0.4, noise: 0.2, inpaintStrength: 1 };
   useStore.getState().patchSettings({ imageSource: source, seed: 16, steps: 33, vibe: [ref] });
@@ -208,22 +210,22 @@ test("selected metadata import preserves unchecked drafts, seed, sampling and im
   const s = useStore.getState().settings;
   assert.equal(s.prompt, "saved prompt");
   assert.equal(s.negativePrompt, "current negative");
-  assert.equal(s.seed, 16); assert.equal(s.steps, 33);
+  assert.equal(s.seed, -1); assert.equal(s.steps, 33);
   assert.deepEqual(s.imageSource, source); assert.deepEqual(s.vibe, [ref]);
 });
 
-test("append and clean imports have explicit behavior; selecting no fields changes nothing", async t => {
+test("tag cleanup affects selected incoming text only; selecting no fields changes nothing", async t => {
   decodeImages(t);
   await prepareImageImport(recipeFile());
-  const onlyPrompts = { ...DEFAULT_RECIPE_IMPORT, characters: false, settings: false, seed: false, append: true };
+  const onlyPrompts = { ...DEFAULT_RECIPE_IMPORT, characters: false, settings: false, seed: false, cleanTags: true };
   assert.equal(applyImageImport("recipe", onlyPrompts), true);
-  assert.equal(useStore.getState().settings.prompt, "current draft, saved prompt");
-  assert.equal(useStore.getState().settings.negativePrompt, "current negative, saved negative");
+  assert.equal(useStore.getState().settings.prompt, "saved prompt");
+  assert.equal(useStore.getState().settings.negativePrompt, "saved negative");
   await prepareImageImport(recipeFile());
   const previous = useStore.getState().settings;
-  assert.equal(applyImageImport("recipe", { ...onlyPrompts, prompt: false, negativePrompt: false, clean: true }), false);
+  assert.equal(applyImageImport("recipe", { ...onlyPrompts, prompt: false, negativePrompt: false }), false);
   assert.equal(useStore.getState().settings, previous);
-  assert.equal(applyImageImport("recipe", { ...onlyPrompts, append: false, clean: true }), true);
+  assert.equal(applyImageImport("recipe", onlyPrompts), true);
   assert.equal(useStore.getState().settings.steps, DEFAULT_SETTINGS.steps);
   assert.equal(useStore.getState().settings.prompt, "saved prompt");
 });
@@ -240,4 +242,75 @@ test("drop and direct imports warn about missing inpainting inputs without inven
   assert.match(String(warning.mock.calls[0].arguments[0]), /original base image and mask/);
   assert.equal(await importRecipeFile(file), true);
   assert.equal(warning.mock.calls.length, 2);
+});
+
+const detailedRecipe = () => recipeFromNovelAIMetadata([{ keyword: "Comment", text: JSON.stringify({
+  model: Model.V4_5, prompt: "saved subject, , watercolor,", uc: "blur, , text,", seed: 0,
+  sampler: "k_euler", noise_schedule: "karras", cfg_rescale: 0, skip_cfg_above_sigma: 58,
+  use_coords: true, steps: 22,
+  characterPrompts: [{ prompt: "girl, , red hair,", uc: "hat, ,", center: { x: 0.2, y: 0.8 } }],
+  reference_image_multiple: ["AQID"], reference_strength_multiple: [0], reference_information_extracted_multiple: [0.7],
+}) }], { width: 832, height: 1216 });
+
+test("characters and Vibes append independently while prompts replace and seed defaults to random", () => {
+  const recipe = detailedRecipe();
+  const current = { ...structuredClone(DEFAULT_SETTINGS), model: Model.V4_5, seed: 99, prompt: "existing subject",
+    characters: [{ prompt: "existing boy", uc: "", enabled: true, center: { x: 0.7, y: 0.3 } }],
+    vibe: structuredClone(recipe.settings.vibe) };
+  for (const appendCharacters of [false, true]) for (const appendVibes of [false, true]) {
+    const result = selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, appendCharacters, appendVibes });
+    assert.equal(result.characters.length, appendCharacters ? 2 : 1);
+    assert.equal(result.vibe.length, appendVibes ? 2 : 1);
+    assert.equal(result.prompt, recipe.settings.prompt);
+    assert.equal(result.seed, -1);
+    assert.equal(result.vibe.at(-1)?.strength, 0);
+    assert.equal(result.vibe.at(-1)?.encodings?.[0].data, "AQID");
+  }
+  assert.equal(current.seed, 99); assert.equal(current.characters.length, 1);
+  assert.equal(selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, seed: true }).seed, 0);
+  const noSeed = { ...recipe, importedFields: recipe.importedFields.filter(field => field !== "seed") };
+  assert.equal(selectedRecipeSettings(current, noSeed, { ...DEFAULT_RECIPE_IMPORT, seed: true }).seed, -1);
+});
+
+test("character-only imports restore coordinates and their switch; settings-only imports preserve existing positioning", () => {
+  const recipe = detailedRecipe();
+  const current = { ...structuredClone(DEFAULT_SETTINGS), model: Model.V4_5, useCoords: false, steps: 30 };
+  const result = selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, prompt: false, negativePrompt: false, settings: false, vibes: false });
+  assert.equal(result.useCoords, true); assert.equal(result.steps, 30);
+  assert.deepEqual(result.characters[0].center, { x: 0.2, y: 0.8 });
+  const settingsOnly = selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, characters: false, vibes: false });
+  assert.equal(settingsOnly.useCoords, false); assert.deepEqual(settingsOnly.characters, []);
+  recipe.settings.useCoords = false;
+  const replaced = selectedRecipeSettings({ ...result, useCoords: true }, recipe, { ...DEFAULT_RECIPE_IMPORT, settings: false, vibes: false });
+  assert.equal(replaced.useCoords, false);
+});
+
+test("cleanup retains weighting, nested groups, quoted text, escapes and intentional duplicate tags", () => {
+  assert.equal(cleanImportedTags(' , girl,, 1.2::red hair, blue eyes::, {a, b}, [x, y], (x, y), "hello,  world", girl, '),
+    'girl, 1.2::red hair, blue eyes::, {a, b}, [x, y], (x, y), "hello,  world", girl');
+  assert.equal(cleanImportedTags(' , a\\,b, , {unfinished, , text'), 'a\\,b, {unfinished, , text');
+  const recipe = detailedRecipe();
+  const current = { ...structuredClone(DEFAULT_SETTINGS), model: Model.V4_5, steps: 35, negativePrompt: "existing, , negative",
+    characters: [{ prompt: "existing, , boy", uc: "old, ,", enabled: true, center: { x: 0.5, y: 0.5 } }] };
+  const result = selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, cleanTags: true, negativePrompt: false, settings: false, appendCharacters: true });
+  assert.equal(result.prompt, "saved subject, watercolor");
+  assert.equal(result.negativePrompt, current.negativePrompt); assert.equal(result.steps, 35);
+  assert.equal(result.characters[0].prompt, "existing, , boy");
+  assert.equal(result.characters[1].prompt, "girl, red hair"); assert.equal(result.characters[1].uc, "hat");
+  assert.equal(recipe.settings.characters[0].prompt, "girl, , red hair,");
+});
+
+test("incompatible Vibe combinations and overflowing appended characters fail without partial changes", async t => {
+  decodeImages(t);
+  const recipe = detailedRecipe();
+  useStore.getState().patchSettings({ model: Model.V4_5, characters: Array.from({ length: 6 }, () => ({ prompt: "girl", uc: "", enabled: true, center: { x: 0.5, y: 0.5 } })) });
+  await prepareImageImport(recipeFile());
+  useStore.setState({ imageImport: { ...useStore.getState().imageImport!, recipe } });
+  const before = useStore.getState().settings;
+  assert.equal(applyImageImport("recipe", { ...DEFAULT_RECIPE_IMPORT, appendCharacters: true }), false);
+  assert.equal(useStore.getState().settings, before); assert.ok(useStore.getState().imageImport);
+  const incompatible = structuredClone(recipe.settings.vibe[0]);
+  incompatible.encodings![0].model = Model.V4;
+  incompatible.sourceModel = Model.V4;
+  assert.throws(() => selectedRecipeSettings({ ...before, characters: [], vibe: [incompatible] }, recipe, { ...DEFAULT_RECIPE_IMPORT, appendVibes: true }), /compatible model/);
 });

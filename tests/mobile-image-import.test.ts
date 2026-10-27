@@ -112,7 +112,7 @@ test("a mislabeled WebP imports from original EXIF before canvas conversion", as
   assert.equal(await prepareImageImport(file), true);
   assert.equal(useStore.getState().imageImport?.recipe?.settings.prompt, info.prompt);
   assert.equal(applyImageImport("recipe"), true);
-  assert.equal(useStore.getState().settings.seed, 42);
+  assert.equal(useStore.getState().settings.seed, -1);
 });
 
 test("a Software marker, partial Comment, or damaged optional chunk cannot hide valid stealth parameters", async () => {
@@ -193,7 +193,7 @@ test("the screenshot's reference notice does not prevent import or cover success
   assert.equal(useStore.getState().imageImport?.recipe?.omittedReferences, true);
   assert.equal(applyImageImport("recipe"), true);
   const state = useStore.getState();
-  assert.equal(state.settings.prompt, info.prompt); assert.equal(state.settings.seed, 42);
+  assert.equal(state.settings.prompt, info.prompt); assert.equal(state.settings.seed, -1);
   assert.equal(state.negativePromptActive, false); assert.equal(state.settingsCollapsed, false);
   assert.equal(state.galleryOpen, false); assert.equal(warning.mock.calls.length, 0);
 });

@@ -109,8 +109,8 @@ test("official naidata PNGs restore encoded Vibes independently of prompt and sa
   assert.equal(applied.prompt, "current subject"); assert.equal(applied.model, Model.V4_5); assert.equal(applied.vibe[0].encodings?.[0].data, "AQID");
   const skipped = selectedRecipeSettings(settings({ vibe: refs() }), recipe, { ...DEFAULT_RECIPE_IMPORT, vibes: false });
   assert.equal(skipped.vibe.length, 1);
-  const clean = selectedRecipeSettings(settings({ vibe: refs() }), recipe, { ...DEFAULT_RECIPE_IMPORT, append: true, clean: true });
-  assert.equal(clean.vibe.length, 1);
+  const appended = selectedRecipeSettings(settings({ vibe: refs() }), recipe, { ...DEFAULT_RECIPE_IMPORT, appendVibes: true });
+  assert.equal(appended.vibe.length, 2);
 });
 
 test("applying Vibes refuses inpainting and too many active characters without changing the current draft", () => {

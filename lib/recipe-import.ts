@@ -4,51 +4,60 @@ import { translateUI } from "@/lib/i18n";
 import { toast } from "sonner";
 import { useStore } from "./store";
 import { Model } from "./nai/protocol";
-import { generationSize } from "./nai/models";
+import { generationSize, maxCharacters } from "./nai/models";
 import { recipeReproductionMessage, type ImportedRecipe } from "./nai/import-recipe";
-import { DEFAULT_SETTINGS, type GenerationSettings } from "./nai/types";
+import { type GenerationSettings } from "./nai/types";
 import { isImageFile, pickImageFile } from "./image-picker";
 import { compatibleVibeModel, MAX_VIBES } from "./nai/vibes";
 import { beginFileImport, isLatestFileImport, FILE_IMPORT_TOAST_ID } from "./file-import-request";
+import { cleanImportedTags } from "./nai/clean-imported-tags";
 
 export type RecipeImportOptions = {
   prompt: boolean; negativePrompt: boolean; characters: boolean; settings: boolean; seed: boolean; vibes?: boolean;
-  append: boolean; clean: boolean;
+  appendCharacters: boolean; appendVibes: boolean; cleanTags: boolean;
 };
 export const DEFAULT_RECIPE_IMPORT: RecipeImportOptions = {
-  prompt: true, negativePrompt: true, characters: true, settings: true, seed: true, vibes: true, append: false, clean: false,
+  prompt: true, negativePrompt: true, characters: true, settings: true, seed: false, vibes: true,
+  appendCharacters: false, appendVibes: false, cleanTags: false,
 };
 
 /** Build a complete snapshot while preserving unchecked fields and the existing Undo action. */
 export function selectedRecipeSettings(current: GenerationSettings, recipe: ImportedRecipe, options = DEFAULT_RECIPE_IMPORT): GenerationSettings {
-  const result = structuredClone(options.clean ? DEFAULT_SETTINGS : current);
+  const result = structuredClone(current);
   const incoming = recipe.settings;
   const selected = (options.prompt || options.negativePrompt || options.characters || options.settings || options.seed || options.vibes && incoming.vibe.length > 0);
   if (!selected) return structuredClone(current);
   if (options.settings) {
     const { prompt: _p, negativePrompt: _n, characters: _c, seed: _s, vibe: _v, directorReference: _r, imageSource: _i,
-      qualityToggle: _qt, qualityPreset: _qp, ucPreset: _uc, autoText: _at, ...sampling } = incoming;
+      qualityToggle: _qt, qualityPreset: _qp, ucPreset: _uc, autoText: _at, useCoords: _coords, ...sampling } = incoming;
     Object.assign(result, sampling);
     // Replacing sampling settings must not reuse an unrelated input or precise reference.
-    result.vibe = options.vibes === false ? result.vibe : []; result.directorReference = []; result.imageSource = null;
+    result.directorReference = []; result.imageSource = null;
   }
-  const join = (existing: string, value: string) => [existing, value].filter(Boolean).join(", ");
+  const tags = (value: string) => options.cleanTags ? cleanImportedTags(value) : value;
   if (options.prompt) {
-    result.prompt = options.append ? join(result.prompt, incoming.prompt) : incoming.prompt;
+    result.prompt = tags(incoming.prompt);
     result.qualityToggle = incoming.qualityToggle; result.qualityPreset = incoming.qualityPreset; result.autoText = incoming.autoText;
   }
   if (options.negativePrompt) {
-    result.negativePrompt = options.append ? join(result.negativePrompt, incoming.negativePrompt) : incoming.negativePrompt;
+    result.negativePrompt = tags(incoming.negativePrompt);
     result.ucPreset = incoming.ucPreset;
   }
-  if (options.characters) result.characters = [...(options.append ? result.characters : []), ...incoming.characters.map(c => ({ ...c, id: crypto.randomUUID() }))];
-  if (options.seed) result.seed = incoming.seed;
+  if (options.characters) {
+    result.characters = [...(options.appendCharacters ? result.characters : []), ...incoming.characters.map(c => ({ ...structuredClone(c), prompt: tags(c.prompt), uc: tags(c.uc), id: crypto.randomUUID() }))];
+    result.useCoords = options.appendCharacters && current.characters.length > 0 ? current.useCoords || incoming.useCoords : incoming.useCoords;
+  }
+  // Unchecked means random, including when the current draft has a pinned seed.
+  result.seed = options.seed && recipe.importedFields.includes("seed") ? incoming.seed : -1;
   if (options.vibes && incoming.vibe.length) {
     if (result.imageSource?.mode === "infill") throw new Error("Vibe Transfer is unavailable during inpainting. Switch to text-to-image or Image2Image first.");
-    result.vibe = [...(options.append && !options.clean ? current.vibe : []), ...structuredClone(incoming.vibe)];
+    result.vibe = [...(options.appendVibes ? current.vibe : []), ...structuredClone(incoming.vibe)];
     if (result.vibe.length > MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
     result.model = compatibleVibeModel(result.vibe, result.model);
     result.directorReference = [];
+  }
+  if (result.characters.filter(c => c.enabled && c.prompt.trim()).length > maxCharacters(result.model)) {
+    throw new Error("The combined prompt has too many active characters for this model.");
   }
   return result;
 }
