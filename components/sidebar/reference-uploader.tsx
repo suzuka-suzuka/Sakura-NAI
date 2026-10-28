@@ -96,7 +96,7 @@ export function ReferenceUploader({
                   onValueChange={strength => update(field, i, { strength })} format={value => value.toFixed(2)} />
                 {vibe && !r.base64 ? <label className="block text-xs text-muted">{translateUI("Information extracted (saved encodings)")}
                   <Select aria-label={translateUI("Information extracted (saved encodings)")} value={r.informationExtracted} onChange={event => update(field, i, { informationExtracted: Number(event.target.value) })}>
-                    {[...new Set((r.encodings?.some(encoding => encoding.model === model) ? r.encodings.filter(encoding => encoding.model === model) : r.encodings ?? []).map(encoding => encoding.informationExtracted))].sort((a,b) => a-b).map(value => <option key={value} value={value}>{value.toFixed(2)}</option>)}
+                    {[...new Set((r.encodings ?? []).map(encoding => encoding.informationExtracted))].sort((a,b) => a-b).map(value => <option key={value} value={value}>{value.toFixed(2)}</option>)}
                   </Select>
                 </label> : <Slider
                   label={translateUI("Info extracted")}

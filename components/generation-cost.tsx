@@ -3,6 +3,7 @@ import { useStore } from "@/lib/store";
 import { estimateCost } from "@/lib/nai/cost";
 import { translateUI, useLocale } from "@/lib/i18n";
 import { activeGenerationSettings } from "@/lib/nai/image-tools";
+import { vibeEncoding } from "@/lib/nai/vibes";
 
 export function useGenerationCost() {
   const draft = useStore(s => s.settings);
@@ -10,7 +11,7 @@ export function useGenerationCost() {
   const settings = activeGenerationSettings(draft, enhancement);
   const account = useStore(s => s.account);
   const client = useStore(s => s.client);
-  return estimateCost(settings, account, client?.uncachedVibes(settings) ?? settings.vibe.length);
+  return estimateCost(settings, account, client?.uncachedVibes(settings) ?? settings.vibe.filter(ref => !vibeEncoding(ref, settings.model)).length);
 }
 export function GenerationCost() {
   useLocale();

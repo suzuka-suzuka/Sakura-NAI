@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS, type GenerationSettings, type ReferenceImage } from "
 import { V5_FULL } from "../lib/nai/models";
 import { parseVibeFile, exportVibes, vibeEncoding, compatibleVibeModel, embeddedVibes } from "../lib/nai/vibes";
 import { NaiClient } from "../lib/nai/client";
+import { estimateCost } from "../lib/nai/cost";
 import { buildPayload } from "../lib/nai/payload";
 import { createStylePreset, parseStylePresets, exportStylePresets, applyStylePreset } from "../lib/style-presets";
 import { loadReferenceSession, saveReferenceSession, loadStyleLibrary, saveStyleLibrary } from "../lib/db/style-library";
@@ -52,7 +53,8 @@ test("official encoding-only bundles use importInfo when unknown variants have n
   const parsed = parseVibeFile(JSON.stringify(source), "example.naiv4vibebundle");
   assert.equal(parsed.length, 2); assert.equal(parsed[0].base64, ""); assert.equal(parsed[0].preview, "");
   assert.equal(parsed[0].informationExtracted, 0.88); assert.equal(parsed[1].sourceModel, Model.V4);
-  assert.throws(() => compatibleVibeModel(parsed, V5_FULL), /compatible model/);
+  assert.equal(compatibleVibeModel(parsed, V5_FULL), Model.V4_5);
+  assert.equal(compatibleVibeModel(parsed, Model.V4_CUR), Model.V4_CUR);
   assert.equal(compatibleVibeModel([parsed[1]], V5_FULL), Model.V4);
 });
 
@@ -80,7 +82,7 @@ test("invalid Vibes reject unsupported versions, corrupt encodings, external ima
   assert.throws(() => parseVibeFile(JSON.stringify({ identifier: "novelai-vibe-transfer-bundle", version: 1, vibes: Array.from({ length: 17 }, () => official()) })), /16/);
 });
 
-test("imported encodings are sent directly with zero encode-vibe requests; mismatches stop before charging", async t => {
+test("encoding-only Vibes reuse V4F encodings across V4 models without encoding charges or relabeling", async t => {
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   t.mock.method(globalThis, "fetch", async (path: string, init: RequestInit) => {
     requests.push({ path, body: JSON.parse(String(init.body)) });
@@ -88,15 +90,62 @@ test("imported encodings are sent directly with zero encode-vibe requests; misma
     const frame = new Uint8Array(bytes.length + 4); new DataView(frame.buffer).setUint32(0, bytes.length); frame.set(bytes, 4);
     return new Response(frame, { headers: { "content-type": "application/x-msgpack" } });
   });
+  const onEncoded = t.mock.fn();
+  const client = new NaiClient({ host: "https://example.invalid", token: "test-token", maxRetries: 0, baseDelay: 0 }, onEncoded);
+  const vibe = parseVibeFile(JSON.stringify(official("encoding", "v4full", Model.V4)));
+  for (const model of [Model.V4, Model.V4_CUR, Model.V4_5, Model.V4_5_CUR]) {
+    const s = settings({ model, vibe });
+    assert.equal(client.uncachedVibes(s), 0);
+    assert.equal(estimateCost(s, null, client.uncachedVibes(s)).encoding, 0);
+    for await (const _ of (await client.generate(s)).events) { /* exhaust stream */ }
+    const request = requests.at(-1)!;
+    assert.equal(request.body.model, model);
+    assert.deepEqual((request.body.parameters as Record<string, unknown>).reference_image_multiple, ["AQID"]);
+  }
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every(request => request.path.includes("generate-image")));
+  assert.equal(onEncoded.mock.callCount(), 0);
+  const exported = JSON.parse((await exportVibes(vibe, Model.V4_CUR)).text);
+  assert.equal(exported.importInfo.model, Model.V4);
+  assert.equal(exported.encodings.v4full.unknown.encoding, "AQID");
+  assert.equal(exported.encodings.v4curated, undefined);
+});
+
+test("Vibe selection prefers the exact model and preserves extraction values and raw-image re-encoding", () => {
+  const [ref] = parseVibeFile(JSON.stringify(official("encoding", "v4full", Model.V4, 0.7)));
+  ref.encodings!.unshift({ model: Model.V4_5, informationExtracted: 0.7, data: "BAUG" });
+  ref.encodings!.push({ model: Model.V4_CUR, informationExtracted: 1, data: "BwgJ" });
+  assert.equal(vibeEncoding(ref, Model.V4_5)?.data, "BAUG");
+  assert.equal(vibeEncoding(ref, Model.V4_CUR)?.data, "AQID");
+  assert.equal(vibeEncoding({ ...ref, informationExtracted: 1 }, Model.V4_CUR)?.data, "BwgJ");
+  assert.equal(vibeEncoding({ ...ref, informationExtracted: 0.5 }, Model.V4_CUR), undefined);
+  assert.equal(vibeEncoding({ ...ref, ...image }, Model.V4_CUR), undefined);
+  assert.equal(vibeEncoding(ref, V5_FULL), undefined);
+  assert.equal(vibeEncoding(ref, Model.V3), undefined);
+});
+
+test("V4F Vibes with original images encode for V4C once and then reuse the cache", async t => {
+  const requests: { path: string; body: Record<string, unknown> }[] = [];
+  t.mock.method(globalThis, "fetch", async (path: string, init: RequestInit) => {
+    requests.push({ path, body: JSON.parse(String(init.body)) });
+    if (path.endsWith("/ai/encode-vibe")) return new Response(new Uint8Array([4, 5, 6]));
+    const bytes = encode({ event_type: "final", samp_ix: 0, step_ix: 28, image: new Uint8Array([137,80,78,71,13,10,26,10]) });
+    const frame = new Uint8Array(bytes.length + 4); new DataView(frame.buffer).setUint32(0, bytes.length); frame.set(bytes, 4);
+    return new Response(frame, { headers: { "content-type": "application/x-msgpack" } });
+  });
   const client = new NaiClient({ host: "https://example.invalid", token: "test-token", maxRetries: 0, baseDelay: 0 });
-  const s = settings({ model: Model.V4_5, vibe: refs() });
+  const s = settings({ model: Model.V4_CUR, vibe: parseVibeFile(JSON.stringify(official("image", "v4full", Model.V4, 0.7))) });
+  assert.equal(client.uncachedVibes(s), 1);
+  assert.equal(estimateCost(s, null, client.uncachedVibes(s)).encoding, 2);
+  for (let i = 0; i < 2; i++) {
+    for await (const _ of (await client.generate(s)).events) { /* exhaust stream */ }
+  }
+  assert.equal(requests.filter(request => request.path.endsWith("/ai/encode-vibe")).length, 1);
+  assert.equal(requests[0].body.model, Model.V4_CUR);
+  assert.equal(requests[0].body.image, png);
+  assert.equal(requests[0].body.information_extracted, 0.7);
+  assert.deepEqual((requests.at(-1)!.body.parameters as Record<string, unknown>).reference_image_multiple, ["BAUG"]);
   assert.equal(client.uncachedVibes(s), 0);
-  for await (const _ of (await client.generate(s)).events) { /* exhaust stream */ }
-  assert.equal(requests.length, 1); assert.match(requests[0].path, /generate-image/);
-  assert.deepEqual((requests[0].body.parameters as Record<string, unknown>).reference_image_multiple, ["AQID"]);
-  const mismatch = await client.generate({ ...s, model: Model.V4 });
-  await assert.rejects(mismatch.events.next(), /no encoding/);
-  assert.equal(requests.length, 1);
 });
 
 test("official naidata PNGs restore encoded Vibes independently of prompt and sampling selections", async () => {

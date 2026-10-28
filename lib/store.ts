@@ -30,7 +30,7 @@ import type { ImageImportCandidate } from "@/lib/recipe-import";
 import type { StyleImportCandidate } from "@/lib/style-import";
 import type { StylePreset } from "@/lib/style-presets";
 import { loadStyleLibrary, saveStyleLibrary, loadReferenceSession, saveReferenceSession } from "@/lib/db/style-library";
-import { rememberEncoding, MAX_VIBES } from "@/lib/nai/vibes";
+import { rememberEncoding, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import {
   loadImages,
   saveImage,
@@ -883,7 +883,7 @@ if (typeof window !== "undefined") {
 useStore.subscribe((s) => {
   if (!s.paidAcknowledged) return;
   const settings = activeGenerationSettings(s.settings, s.enhancement);
-  if (estimateCost(settings, s.account, s.client?.uncachedVibes(settings) ?? settings.vibe.length).total === 0) {
+  if (estimateCost(settings, s.account, s.client?.uncachedVibes(settings) ?? settings.vibe.filter(ref => !vibeEncoding(ref, settings.model)).length).total === 0) {
     useStore.setState({ paidAcknowledged: false });
   }
 });

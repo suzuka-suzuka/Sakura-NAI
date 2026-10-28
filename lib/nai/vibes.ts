@@ -36,7 +36,13 @@ function imageData(value: unknown): { base64: string; preview: string } {
 }
 
 export function vibeEncoding(ref: ReferenceImage, model: GenerationModel): VibeEncoding | undefined {
-  return ref.encodings?.find(value => value.model === model && Math.abs(value.informationExtracted - ref.informationExtracted) < 0.000001);
+  if (!isV4Model(model)) return;
+  const variants = ref.encodings?.filter(value => Math.abs(value.informationExtracted - ref.informationExtracted) < 0.000001);
+  const exact = variants?.find(value => value.model === model);
+  // Like Aaalice NAI Launcher, keep encoding-only references usable across V4 models.
+  // References with original pixels still require an encoding for the requested model.
+  if (exact || ref.base64) return exact;
+  return variants?.find(value => value.model === ref.sourceModel) ?? variants?.[0];
 }
 export function rememberEncoding(ref: ReferenceImage, encoding: VibeEncoding): ReferenceImage {
   return { ...ref, encodings: [...(ref.encodings ?? []).filter(value => value.model !== encoding.model || Math.abs(value.informationExtracted - encoding.informationExtracted) >= 0.000001), encoding] };
