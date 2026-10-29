@@ -33,7 +33,9 @@ import { loadStyleLibrary, saveStyleLibrary, loadReferenceSession, saveReference
 import { rememberEncoding, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import {
   loadImages,
-  saveImage,
+  saveImages,
+  maintainGallery,
+  type GalleryReport,
   deleteImage as dbDelete,
   clearImages,
   type GalleryImage,
@@ -103,6 +105,15 @@ type Store = {
 
   // ---- gallery ----
   images: GalleryImage[];
+  galleryCount: number;
+  galleryBytes: number;
+  galleryIds: number[] | null;
+  galleryNext: number | null;
+  galleryLoadingMore: boolean;
+  galleryRevision: number;
+  loadMoreGallery: () => Promise<void>;
+  applyGalleryReport: (report: GalleryReport) => void;
+  appendGalleryImages: (images: GalleryImage[]) => Promise<GalleryImage[]>;
   /** Distinguishes first-paint, genuinely empty, and IDB-unavailable — they used to render alike. */
   galleryStatus: "loading" | "ready" | "error";
   galleryError: string | null;
@@ -344,22 +355,75 @@ export const useStore = create<Store>()((set, get) => ({
 
   // ---- gallery ----
   images: [],
+  galleryCount: 0,
+  galleryBytes: 0,
+  galleryIds: null,
+  galleryNext: null,
+  galleryLoadingMore: false,
+  galleryRevision: 0,
   galleryStatus: "loading",
   galleryError: null,
   selectedBatch: null,
   selectedImage: null,
+  applyGalleryReport: (report) => {
+    const ids = new Set(report.ids);
+    set(s => ({
+      galleryCount: report.count, galleryBytes: report.bytes, galleryIds: report.ids,
+      images: s.images.filter(image => image.id !== undefined && (image.id < 0 || ids.has(image.id))),
+      selectedBatch: s.selectedBatch?.filter(image => image.id !== undefined && (image.id < 0 || ids.has(image.id))) ?? null,
+      selectedImage: s.selectedImage && s.selectedImage.id !== undefined && (s.selectedImage.id < 0 || ids.has(s.selectedImage.id)) ? s.selectedImage : null,
+      enhancement: s.enhancement && s.images.some(image => image.dataUrl === s.enhancement!.source.dataUrl && image.id !== undefined && image.id > 0 && !ids.has(image.id)) ? null : s.enhancement,
+    }));
+    if (report.deleted) toast.info(translateUI("History limit reached. Removed {0} oldest images.", report.deleted), { id: "gallery-limit" });
+    else if (report.warn) toast.warning(translateUI("Local history has reached 80% of its limit (200 images or 500 MiB). Oldest images will be deleted automatically at the limit."), { id: "gallery-warning", duration: 10000 });
+  },
   loadGallery: async () => {
-    set({ galleryStatus: "loading", galleryError: null });
+    const revision = get().galleryRevision + 1;
+    set({ galleryStatus: "loading", galleryError: null, galleryRevision: revision, galleryLoadingMore: false });
     try {
-      const images = await loadImages();
-      set({ images, galleryStatus: "ready" });
-      if (images.length > 0) get().selectBatch(images[0].batchId);
+      const report = await maintainGallery();
+      const page = await loadImages();
+      if (get().galleryRevision !== revision) return;
+      get().applyGalleryReport(report);
+      set({ images: page.images, galleryNext: page.next, galleryStatus: "ready" });
+      if (page.images.length) get().selectBatch(page.images[0].batchId);
     } catch (e) {
-      // Swallowing this used to leave images: [], telling a returning user whose storage failed
-      // that they had never generated anything.
-      console.error(translateUI("Failed to load gallery"), e);
+      if (get().galleryRevision !== revision) return;
       set({ galleryStatus: "error", galleryError: e instanceof Error ? e.message : String(e) });
     }
+  },
+  loadMoreGallery: async () => {
+    const { galleryNext, galleryLoadingMore, galleryRevision } = get();
+    if (galleryNext === null || galleryLoadingMore) return;
+    set({ galleryLoadingMore: true });
+    try {
+      const page = await loadImages(galleryNext);
+      if (get().galleryRevision !== galleryRevision) return;
+      set(s => ({ images: [...s.images, ...page.images.filter(image => !s.images.some(existing => existing.id === image.id))], galleryNext: page.next }));
+    } catch (e) { toast.error(translateUI("Couldn't load more history: {0}", String(e))); }
+    finally { if (get().galleryRevision === galleryRevision) set({ galleryLoadingMore: false }); }
+  },
+  appendGalleryImages: async (images) => {
+    set(s => ({ galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false }));
+    let saved: GalleryImage[];
+    try {
+      const result = await saveImages(images);
+      saved = result.images;
+      get().applyGalleryReport(result.report);
+    } catch (e) {
+      console.error("Could not save generated images", e);
+      // A failed local write must not discard a paid generation or retry the request.
+      saved = images.map((image, i) => ({ ...image, id: -(Date.now() + i) }));
+      toast.error(translateUI("Images generated, but local history could not be saved. Download the current images before generating again or leaving."), { duration: 12000 });
+    }
+    set(s => {
+      const images = [...saved.slice().reverse(), ...s.images.filter(image => (image.id ?? 0) >= 0)];
+      const oldestLoaded = Math.min(...images.filter(image => (image.id ?? 0) > 0).map(image => image.id!));
+      // Generation can finish while the initial history read is still pending.
+      const galleryNext = s.galleryNext ?? (Number.isFinite(oldestLoaded) && s.galleryIds?.some(id => id < oldestLoaded) ? oldestLoaded : null);
+      return { images, galleryNext, galleryStatus: "ready", galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false };
+    });
+    return saved;
   },
   selectBatch: (batchId, loadRecipe = false) => {
     const { images } = get();
@@ -424,13 +488,19 @@ export const useStore = create<Store>()((set, get) => ({
       return copy;
     };
 
-    let undone = false;
+    let undone = false, deleting = false;
+    const finishDelete = () => {
+      if (undone || deleting) return;
+      deleting = true;
+      void dbDelete(id).then(report => get().applyGalleryReport(report)).catch(e => toast.error(String(e)));
+    };
     toast(translateUI("Image deleted"), {
       duration: 6000,
       action: {
         label: translateUI("Undo"),
         onClick: () => {
           undone = true;
+          if (doomed.id! > 0 && get().galleryIds && !get().galleryIds!.includes(id)) return;
           set((s) => ({
             images: reinsert(s.images, doomed, imageIndex),
             selectedBatch:
@@ -442,10 +512,10 @@ export const useStore = create<Store>()((set, get) => ({
         },
       },
       onAutoClose: () => {
-        if (!undone) void dbDelete(id);
+        finishDelete();
       },
       onDismiss: () => {
-        if (!undone) void dbDelete(id);
+        finishDelete();
       },
     });
   },
@@ -453,10 +523,11 @@ export const useStore = create<Store>()((set, get) => ({
     // clearImages() throws on quota, private browsing and corruption. Unhandled, the confirm modal
     // closed as if it had worked while every image was still there — loadGallery already treats
     // exactly this failure as worth a dedicated error state, so route into the same one.
-    const n = get().images.length;
+    const n = get().galleryCount;
+    set(s => ({ galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false }));
     try {
       await clearImages();
-      set({ images: [], selectedBatch: null, selectedImage: null, enhancement: null });
+      set(s => ({ images: [], selectedBatch: null, selectedImage: null, enhancement: null, galleryCount: 0, galleryBytes: 0, galleryIds: [], galleryNext: null, galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false }));
       toast.success(translateUI("Deleted {0} image{1}", n, n === 1 ? "" : "s"));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -605,8 +676,8 @@ export const useStore = create<Store>()((set, get) => ({
     const commit = async (): Promise<GalleryImage[]> => {
       if (!finals.length) return [];
       const ordered = finals.slice().sort((a, b) => a.sampleIndex - b.sampleIndex);
-      const saved = await Promise.all(
-        ordered.map(async (f, i) => {
+      const saved = await get().appendGalleryImages(
+        ordered.map((f, i) => {
           // Per-image seed, not the batch base seed — otherwise "Use these settings" on image #3
           // silently restores image #1's recipe while the toolbar chip shows the correct seed.
           const img: GalleryImage = {
@@ -621,12 +692,10 @@ export const useStore = create<Store>()((set, get) => ({
             batchIndex: i,
             batchSize: ordered.length,
           };
-          img.id = await saveImage(img);
           return img;
         }),
       );
 
-      set((s) => ({ images: [...saved.slice().reverse(), ...s.images] }));
       // The gallery is an overlay below 1280px. Opening it here would cover the result at the exact
       // moment it resolves; on wide layouts it remains a useful persistent confirmation/history.
       const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
@@ -762,7 +831,7 @@ export const useStore = create<Store>()((set, get) => ({
       if (!results.length) return;
 
       const batchId = Date.now();
-      const saved: GalleryImage[] = [];
+      const pending: GalleryImage[] = [];
       for (let i = 0; i < results.length; i++) {
         const dataUrl = results[i].toDataURL();
         const dimensions = await readImageDimensions(await (await fetch(dataUrl)).blob());
@@ -777,12 +846,10 @@ export const useStore = create<Store>()((set, get) => ({
           batchSize: results.length,
           processedWith: kind,
         };
-        const id = await saveImage(img);
-        img.id = id;
-        saved.push(img);
+        pending.push(img);
       }
-      set((s) => ({
-        images: [...saved.slice().reverse(), ...s.images],
+      const saved = await get().appendGalleryImages(pending);
+      set(() => ({
         selectedBatch: saved,
         selectedImage: saved[0],
         galleryOpen: !(typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches),

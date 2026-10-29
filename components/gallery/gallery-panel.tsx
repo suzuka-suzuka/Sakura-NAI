@@ -36,6 +36,10 @@ function groupByBatch(images: GalleryImage[]) {
 export function GalleryPanel() {
   useLocale();
   const images = useStore((s) => s.images);
+  const count = useStore(s => s.galleryCount);
+  const next = useStore(s => s.galleryNext);
+  const loadingMore = useStore(s => s.galleryLoadingMore);
+  const loadMore = useStore(s => s.loadMoreGallery);
   const status = useStore((s) => s.galleryStatus);
   const galleryError = useStore((s) => s.galleryError);
   const selectedBatchId = useStore((s) => s.selectedBatch?.[0]?.batchId ?? null);
@@ -137,6 +141,7 @@ export function GalleryPanel() {
               />
             ))}
           </motion.div>
+          {next !== null && <Button size="sm" disabled={loadingMore} onClick={() => void loadMore()}>{translateUI(loadingMore ? "Loading…" : "Load more history")}</Button>}
         </div>
       )}
 
@@ -145,7 +150,7 @@ export function GalleryPanel() {
         open={confirmClear}
         onClose={() => setConfirmClear(false)}
         title={translateUI("Delete all images?")}
-        description={translateUI("This permanently removes all {0} images from local storage. It can't be undone.", images.length)}
+        description={translateUI("This permanently removes all {0} images from local storage. It can't be undone.", count)}
         className="max-w-sm"
       >
         <div className="flex justify-end gap-2">
