@@ -1,3 +1,4 @@
+import { effectiveEffortSettings } from "./effort";
 import { isV4Model, isV5Model, maxCharacters } from "./models";
 import { Model, Sampler, type GenerationPayload } from "./protocol";
 import type { GenerationSettings } from "./types";
@@ -7,6 +8,7 @@ import { applyImageInput } from "./image-input";
 import { isGenerationDimension, MAX_GENERATION_PIXELS } from "./dimensions";
 
 export function buildPayload(s: GenerationSettings, seed: number): GenerationPayload {
+  s = effectiveEffortSettings(s);
   if (!Number.isInteger(seed) || seed < 0 || seed > 4294967295) throw new Error("Invalid generation seed");
   if (!Number.isFinite(s.cfgRescale) || s.cfgRescale < 0 || s.cfgRescale > 1) throw new Error("Guidance rescale must be between 0 and 1");
   if (isV5Model(s.model)) return applyImageInput(buildV5Payload(s, seed), s, seed);

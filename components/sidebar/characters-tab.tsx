@@ -7,7 +7,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, PanelsTopLeft, Ch
 import { CharacterIcon } from "@/components/character-icon";
 import type { CharacterKind } from "@/lib/nai/characters";
 import { useStore } from "@/lib/store";
-import { supportsCharacters, maxCharacters } from "@/lib/nai/models";
+import { isMediumModel, supportsCharacters, maxCharacters } from "@/lib/nai/models";
 import { TagTextarea } from "./tag-textarea";
 import { IconButton } from "@/components/ui/icon-button";
 import { cn } from "@/lib/utils";
@@ -51,16 +51,18 @@ function CharacterPrompt({ character, index, onChange }: {
   index: number;
   onChange: (patch: Partial<CharacterSetting>) => void;
 }) {
-  const [polarity, setPolarity] = useState<"prompt" | "uc">("prompt");
+  const medium = useStore(s => isMediumModel(s.settings.model));
+  const [savedPolarity, setPolarity] = useState<"prompt" | "uc">("prompt");
+  const polarity = medium ? "prompt" : savedPolarity;
   const id = useId();
   return <div className="min-w-0 bg-bg px-2 pb-2 pt-2.5">
     <div role="tablist" aria-label={t("Character {0} prompt type", index + 1)} className="flex items-center gap-2 px-0.5">
-      {(["prompt", "uc"] as const).map(value => <button key={value} type="button" role="tab"
+      {(medium ? ["prompt"] as const : ["prompt", "uc"] as const).map(value => <button key={value} type="button" role="tab"
         id={`${id}-${value}`} aria-controls={`${id}-editor`} aria-selected={polarity === value}
         tabIndex={polarity === value ? 0 : -1}
         onClick={() => setPolarity(value)}
         onKeyDown={e => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+          if (medium || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
           e.preventDefault();
           const next = e.key === "Home" ? "prompt" : e.key === "End" ? "uc" : polarity === "prompt" ? "uc" : "prompt";
           setPolarity(next);

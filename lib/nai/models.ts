@@ -6,11 +6,14 @@ type Option<T extends string> = { value: T; label: string };
 
 export const V5_FULL = "nai-diffusion-5-full";
 export const V5_CURATED = "nai-diffusion-5-curated";
-export type GenerationModel = Model | typeof V5_FULL | typeof V5_CURATED;
-export const isV5Model = (model: string): model is typeof V5_FULL | typeof V5_CURATED =>
-  model === V5_FULL || model === V5_CURATED;
+export const V5_FULL_MEDIUM = "nai-diffusion-5-full-medium";
+export const isMediumModel = (model: string) => model === V5_FULL_MEDIUM;
+export type GenerationModel = Model | typeof V5_FULL | typeof V5_CURATED | typeof V5_FULL_MEDIUM;
+export const isV5Model = (model: string): model is typeof V5_FULL | typeof V5_CURATED | typeof V5_FULL_MEDIUM =>
+  model === V5_FULL || model === V5_CURATED || model === V5_FULL_MEDIUM;
 
 export const MODEL_OPTIONS: Option<GenerationModel>[] = [
+  { value: V5_FULL_MEDIUM, label: "NAI Diffusion V5 Full (Medium)" },
   { value: V5_FULL, label: "NAI Diffusion V5 Full" },
   { value: V5_CURATED, label: "NAI Diffusion V5 Curated" },
   { value: Model.V4_5, label: "NAI Diffusion V4.5 Full" },

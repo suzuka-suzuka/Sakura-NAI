@@ -1,4 +1,5 @@
-import { isV4Model, isV5Model } from "./models";
+import { effectiveEffortSettings } from "./effort";
+import { isV4Model, isV5Model, isMediumModel } from "./models";
 import { Model } from "./protocol";
 import type { GenerationSettings } from "./types";
 import { imageToolOutputSize } from "./image-tools";
@@ -44,6 +45,7 @@ export function augmentCost(width: number, height: number, backgroundRemoval: bo
  * Unknown accounts never display a free price. Final billing remains server-controlled.
  */
 export function estimateCost(s: GenerationSettings, account: AccountInfo | null, uncachedVibes = 0): CostEstimate {
+  s = effectiveEffortSettings(s);
   const v5 = isV5Model(s.model);
   const active = !!account && ([1, 2, 3, 4].includes(account.accountType ?? 0) ||
     (account.expiresAt !== undefined ? account.expiresAt > Date.now() / 1000 : account.active));
@@ -55,7 +57,7 @@ export function estimateCost(s: GenerationSettings, account: AccountInfo | null,
   const free = opus && allowance && area <= 1048576 && s.steps <= 28;
   const smea = !s.imageSource && !v5 && !isV4Model(s.model) && s.autoSmea;
   const strength = s.imageSource ? s.imageSource.mode === "infill" ? s.imageSource.inpaintStrength : s.imageSource.strength : 1;
-  const perImage = Math.max(2, Math.ceil(Math.ceil(2.951823174884865e-6 * area + 5.753298233447344e-7 * area * s.steps) * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));
+  const perImage = Math.max(2, Math.ceil(Math.ceil(2.951823174884865e-6 * area + 5.753298233447344e-7 * area * s.steps * (isMediumModel(s.model) ? 1 / 1.06521739 : 1)) * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));
   const base = perImage * Math.max(0, s.nSamples - (free ? 1 : 0));
   const refsAllowed = !v5 && s.imageSource?.mode !== "infill";
   const director = refsAllowed && (s.model === Model.V4_5 || s.model === Model.V4_5_CUR) ? s.directorReference.length : 0;

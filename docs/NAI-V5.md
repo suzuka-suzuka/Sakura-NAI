@@ -70,3 +70,16 @@ Enhance Max 在 V5 且源面积小于 `0.8 × 3,145,728` 时可用，提交源�
 - [NAIWeaver 请求构造](https://github.com/ststoryweaver/NAIWeaver/blob/master/lib/core/services/nai_request_builder.dart)
 
 接口能力可能随 NovelAI 更新，后续调整集中在以上请求层文件中。
+
+
+## Effort（2026-10-29 核实）
+
+V5 Full 增加 High（通常）/ Medium（节约）选择，Curated 不提供此开关。Medium 的 wire 模型为 `nai-diffusion-5-full-medium`，重绘为 `nai-diffusion-5-full-medium-inpainting`。
+
+官方公开脚本的 fixedSettings 为 14 步、`k_euler_ancestral`、Heavy UC；cfg_rescale 不支持。有效请求清空自定义全局/角色 UC，但保留固定 Heavy 文本和 tag_hint_uc_preset=2。设置草稿不被覆盖，因此切回 High 可以恢复原参数。生成快照和历史使用有效设置，元数据识别 Medium 标识及官方 93F4BD30 / 70AB5786 Source 哈希。
+
+Anlas 公式只在步数项乘 `1 / 1.06521739` 后做基础取整，再应用原 V5 1.5 系数、强度和免费资格；与 sakura-nai-relay 保持一致。例如 832×1216 单张普通账户，High 23 步 26 Anlas，Medium 14 步 17 Anlas。官方公告约 42% 是指定基准的描述，不作为统一折扣。
+
+中转的下游本地免费体力仍每请求扣一份；Medium 节省的是官方上游额度及依公式计算的 Anlas，不改变中转本地张数规则。
+
+来源：[官方 Effort 文档](https://docs.novelai.net/en/image/effort/)、[2026-10-08 公告](https://journal.novelai.net/novelai-diffusion-v5-full-effort-toggle/) 及 novelai.net/image 当日公开脚本。

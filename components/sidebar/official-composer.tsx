@@ -3,6 +3,8 @@
 
 import { useId, useRef, useState } from "react";
 import { ArrowLeftRight, Expand, Pencil, Upload, Trash2, RectangleHorizontal, RectangleVertical, Square, ImagePlus, Eraser, PanelTopClose, PanelTopOpen, Palette } from "lucide-react";
+import { EffortToggle } from "./effort-toggle";
+import { isMediumModel, V5_FULL, V5_FULL_MEDIUM } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import { translateUI as t, useLocale } from "@/lib/i18n";
@@ -19,16 +21,16 @@ import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
-export function NumericSlider({ label, value, min, max, step = 1, onChange }: {
-  label: string; value: number; min: number; max: number; step?: number; onChange: (n: number) => void;
+export function NumericSlider({ label, value, min, max, step = 1, onChange, disabled = false }: {
+  label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (n: number) => void;
 }) {
   return <label className="block space-y-2 text-[13px] font-semibold">
     <span>{label}</span>
     <span className="flex items-center gap-4">
-      <input aria-label={label} type="number" min={min} max={max} step={step} value={value}
+      <input disabled={disabled} aria-label={label} type="number" min={min} max={max} step={step} value={value}
         onChange={e => { if (e.target.value) onChange(Math.min(max, Math.max(min, Number(e.target.value)))); }}
         className="w-16 rounded border border-border-soft bg-bg px-2 py-1.5 text-center font-normal outline-none focus:border-accent" />
-      <input aria-label={`${label} ${t("Slider")}`} type="range" min={min} max={max} step={step} value={value}
+      <input disabled={disabled} aria-label={`${label} ${t("Slider")}`} type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(Number(e.target.value))} className="nai-range min-w-0 flex-1" />
     </span>
   </label>;
@@ -88,6 +90,7 @@ function PromptBox({ negative = false, combined = false, onSelect, onToggleLayou
 
 function PromptSection() {
   const combined = useStore(st => st.combinedPrompts), setUI = useStore(st => st.setUI);
+  const medium = useStore(st => isMediumModel(st.settings.model));
   const negative = useStore(st => st.negativePromptActive);
   const section = useRef<HTMLDivElement>(null);
   const toggleLayout = () => {
@@ -96,8 +99,8 @@ function PromptSection() {
     requestAnimationFrame(() => section.current?.querySelector<HTMLButtonElement>(combined ? "[data-prompt-layout-toggle]" : '[role="tab"][aria-selected="true"]')?.focus());
   };
   return <div ref={section} className="mx-3 overflow-hidden rounded border border-border-soft bg-bg">
-    <PromptBox negative={combined && negative} combined={combined} onSelect={negativePromptActive => setUI({ negativePromptActive })} onToggleLayout={toggleLayout} />
-    {!combined && <PromptBox negative onToggleLayout={toggleLayout} />}
+    <PromptBox negative={!medium && combined && negative} combined={!medium && combined} onSelect={negativePromptActive => setUI({ negativePromptActive })} onToggleLayout={toggleLayout} />
+    {!medium && !combined && <PromptBox negative onToggleLayout={toggleLayout} />}
   </div>;
 }
 
@@ -151,12 +154,13 @@ export function OfficialComposer() {
   return <>
     <div className="flex items-center gap-2 px-3 py-3">
       <span className="text-[13px] text-fg-2">{t("Model")}</span>
-      <div className="min-w-0 flex-1"><Select aria-label={t("Model")} value={s.model} onChange={e => patch({ model: e.target.value as typeof s.model })} className="h-9 rounded text-[13px]">
-        {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{modelLabel(o.value).replace("NAI Diffusion ", "")}</option>)}
+      <div className="min-w-0 flex-1"><Select aria-label={t("Model")} value={isMediumModel(s.model) ? V5_FULL : s.model} onChange={e => patch({ model: e.target.value as typeof s.model })} className="h-9 rounded text-[13px]">
+        {MODEL_OPTIONS.filter(o => o.value !== V5_FULL_MEDIUM).map(o => <option key={o.value} value={o.value}>{modelLabel(o.value).replace("NAI Diffusion ", "")}</option>)}
       </Select></div>
       {(isV5Model(s.model) || isV4Model(s.model)) && <button aria-label={t("Prompt mode")} title={t("Furry mode adds fur dataset at the start of the prompt.")} className="shrink-0 rounded bg-surface-2 px-2 py-2 text-xs" onClick={()=>patch({promptMode:s.promptMode === "furry" ? "anime" : "furry"})}>{s.promptMode === "furry" ? "Furry" : "Anime"}</button>}
     </div>
     <div className="px-3 pb-3"><button type="button" onClick={() => useStore.getState().setUI({ showStyleLibrary: true })} className="flex w-full items-center justify-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs font-semibold text-accent transition-colors hover:bg-accent/10"><Palette className="size-4" />{t("Import style / preset")}</button></div>
+    <div className="px-3 pb-3"><EffortToggle /></div>
     <PromptSection />
     <CharactersTab />
     <ImageInputPanel />

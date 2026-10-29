@@ -3,6 +3,8 @@
 import { translateUI, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Dices, Lock, LockOpen } from "lucide-react";
+import { EffortToggle } from "./effort-toggle";
+import { isMediumModel, V5_FULL, V5_FULL_MEDIUM } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import {
@@ -62,13 +64,14 @@ export function BasicTab() {
   return (
     <>
       <Section title={translateUI("Model")}>
-        <Select value={s.model} onChange={(e) => patch({ model: e.target.value as typeof s.model })}>
-          {MODEL_OPTIONS.map((m) => (
+        <Select value={isMediumModel(s.model) ? V5_FULL : s.model} onChange={(e) => patch({ model: e.target.value as typeof s.model })}>
+          {MODEL_OPTIONS.filter(o => o.value !== V5_FULL_MEDIUM).map((m) => (
             <option key={m.value} value={m.value}>
               {translateUI(m.label)}
             </option>
           ))}
         </Select>
+        <EffortToggle />
       </Section>
 
       <Section title={translateUI("Prompt")}>
@@ -92,7 +95,7 @@ export function BasicTab() {
         </div>
       </Section>
 
-      <Section title={translateUI("Undesired content")}>
+      {!isMediumModel(s.model) && <Section title={translateUI("Undesired content")}>
         <div className="rounded-[var(--radius-input)] border border-border bg-surface-2 focus-within:border-accent/60" data-testid="negative-prompt-editor">
           <TagTextarea
             id="uc"
@@ -105,8 +108,7 @@ export function BasicTab() {
             <PresetSelect label={translateUI("Undesired content preset")} prefix={translateUI("Negative tags")} value={String(s.ucPreset)} options={NEGATIVE_PRESETS} onChange={value => patch({ ucPreset: Number(value) as NegativePreset })} />
           </div>
         </div>
-      </Section>
-
+      </Section>}
       <CharactersTab />
 
       <Section title={translateUI("Resolution")}>
@@ -221,10 +223,10 @@ export function BasicTab() {
           <Slider label={translateUI("Batch size")} min={1} max={maxSamples(s.model, s.width, s.height)} value={s.nSamples} onValueChange={(v) => patch({ nSamples: v })} format={(v) => translateUI("{0} image{1}", v, v > 1 ? "s" : "")} />
         </Field>
         <Field hint={translateUI("More steps means finer detail and a slower run. 23–28 is typical.")}>
-          <Slider label={translateUI("Steps")} showRange min={1} max={50} value={s.steps} onValueChange={(v) => patch({ steps: v })} />
+          <Slider label={translateUI("Steps")} showRange min={1} max={50} disabled={isMediumModel(s.model)} value={isMediumModel(s.model) ? 14 : s.steps} onValueChange={(v) => patch({ steps: v })} />
         </Field>
         <Field label={translateUI("Sampler")} htmlFor="sampler">
-          <Select id="sampler" value={s.sampler} onChange={(e) => patch({ sampler: e.target.value as typeof s.sampler })}>
+          <Select id="sampler" disabled={isMediumModel(s.model)} value={isMediumModel(s.model) ? "k_euler_ancestral" : s.sampler} onChange={(e) => patch({ sampler: e.target.value as typeof s.sampler })}>
             {SAMPLER_OPTIONS.map((m) => (
               <option key={m.value} value={m.value}>
                 {translateUI(m.label)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { translateUI, useLocale } from "@/lib/i18n";
+import { isMediumModel } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { NOISE_OPTIONS, isV5Model, isV4Model } from "@/lib/nai/models";
 import { Field, Section } from "./field";
@@ -31,7 +32,7 @@ export function AdvancedTab() {
           <Slider label={translateUI("Prompt guidance (CFG)")} showRange min={1} max={10} step={0.1} value={s.scale} onValueChange={(v) => patch({ scale: v })} format={(v) => v.toFixed(1)} />
         </Field>
         <Field hint={translateUI("Softens over-saturation at high guidance. Leave at 0 unless colours look burnt.")}>
-          <Slider label={translateUI("Guidance rescale")} showRange min={0} max={1} step={0.01} value={s.cfgRescale} onValueChange={(v) => patch({ cfgRescale: v })} format={(v) => v.toFixed(2)} />
+          <Slider label={translateUI("Guidance rescale")} showRange min={0} max={1} step={0.01} disabled={isMediumModel(s.model)} value={isMediumModel(s.model) ? 0 : s.cfgRescale} onValueChange={(v) => patch({ cfgRescale: v })} format={(v) => v.toFixed(2)} />
         </Field>
         <Field label={translateUI("Noise schedule")} htmlFor="noise">
           <Select id="noise" disabled={v5} value={v5 ? "karras" : s.noiseSchedule} onChange={(e) => patch({ noiseSchedule: e.target.value as typeof s.noiseSchedule })}>

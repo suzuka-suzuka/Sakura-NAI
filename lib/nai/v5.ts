@@ -1,3 +1,4 @@
+import { effectiveEffortSettings } from "./effort";
 import { qualityText, negativeText, qualityPreset } from "./presets";
 import { Sampler } from "./protocol";
 import type { GenerationSettings } from "./types";
@@ -27,6 +28,7 @@ export function v5Prompt(s: GenerationSettings) {
 }
 
 export function buildV5Payload(s: GenerationSettings, seed: number) {
+  s = effectiveEffortSettings(s);
   if (!isV5Model(s.model)) throw new Error("Not a V5 model");
   if (!isGenerationSize(s.width, s.height))
     throw new Error(translateUI("V5 dimensions must be multiples of 64, with at most 3,145,728 pixels."));

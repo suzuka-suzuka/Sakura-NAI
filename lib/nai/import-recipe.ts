@@ -1,7 +1,7 @@
 import { extractImageMetadata } from "./media";
 import { readImageDimensions } from "./image-decode";
 import { Model, Noise, Sampler } from "./protocol";
-import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, V5_FULL, V5_CURATED, type GenerationModel } from "./models";
+import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, V5_FULL, V5_CURATED, V5_FULL_MEDIUM, type GenerationModel } from "./models";
 import { DEFAULT_SETTINGS, type CharacterSetting, type GenerationSettings } from "./types";
 import { MAX_GENERATION_DIMENSION, MAX_GENERATION_PIXELS } from "./dimensions";
 import { embeddedVibes, vibesFromMetadata } from "./vibes";
@@ -83,6 +83,7 @@ function readModel(value: unknown): GenerationModel | null {
   if (MODEL_VALUES.has(raw as GenerationModel)) return raw as GenerationModel;
 
   const normalized = raw.toLowerCase();
+  if (/93f4bd30|70ab5786/.test(normalized) || (/diffusion[- ]?5|\bv5\b/.test(normalized) && normalized.includes("medium"))) return V5_FULL_MEDIUM;
   const curated = normalized.includes("curated");
   if (/diffusion[- ]?5|\bv5\b/.test(normalized)) return curated ? V5_CURATED : V5_FULL;
   if (normalized.includes("furry") || normalized.includes("4be8c60c")) return Model.FURRY;

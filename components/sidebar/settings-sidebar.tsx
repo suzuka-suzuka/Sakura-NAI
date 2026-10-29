@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Menu, X, ChevronDown, RotateCcw, KeyRound, Settings2, PanelLeftClose, Dices, Hash, Wand2 } from "lucide-react";
+import { isMediumModel } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { translateUI as t, useLocale } from "@/lib/i18n";
 import { SAMPLER_OPTIONS, NOISE_OPTIONS, isV5Model, isV4Model } from "@/lib/nai/models";
@@ -24,7 +25,7 @@ function SamplingPanel() {
   const selected = useStore(st => st.selectedImage);
   const modern = isV5Model(s.model) || isV4Model(s.model);
   return <div className="space-y-4 px-3 pb-3">
-    <NumericSlider label={t("Steps")} value={s.steps} min={1} max={50} onChange={steps => patch({ steps })} />
+    <NumericSlider label={t("Steps")} disabled={isMediumModel(s.model)} value={isMediumModel(s.model) ? 14 : s.steps} min={1} max={50} onChange={steps => patch({ steps })} />
     {!isV5Model(s.model) && <button type="button" aria-pressed={s.varietyPlus} title={t("Variety+ increases variation without an extra Anlas charge.")} onClick={() => patch({ varietyPlus: !s.varietyPlus })} className={`float-right rounded px-2 py-1 text-[11px] font-semibold ${s.varietyPlus ? "bg-yellow-200 text-yellow-950" : "bg-surface-3 text-muted"}`}>Variety+</button>}
     <NumericSlider label={t("Prompt guidance (CFG)")} value={s.scale} min={1} max={10} step={0.1} onChange={scale => patch({ scale })} />
     <div className="grid grid-cols-2 gap-3">
@@ -33,10 +34,10 @@ function SamplingPanel() {
         <IconButton size="sm" label={t("Random seed")} onClick={() => patch({ seed: -1 })}><Dices /></IconButton>
         <IconButton size="sm" label={t("Copy seed to settings")} disabled={!selected} onClick={() => selected && patch({ seed: selected.seed })}><Hash /></IconButton>
       </div></label>
-      <label className="space-y-2 text-xs font-semibold"><span>{t("Sampler")}</span><Select aria-label={t("Sampler")} className="h-9 rounded px-2 text-xs" value={s.sampler} onChange={e => patch({ sampler: e.target.value as typeof s.sampler })}>{SAMPLER_OPTIONS.filter(o => !modern || o.value !== "ddim_v3").map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></label>
+      <label className="space-y-2 text-xs font-semibold"><span>{t("Sampler")}</span><Select aria-label={t("Sampler")} className="h-9 rounded px-2 text-xs" disabled={isMediumModel(s.model)} value={isMediumModel(s.model) ? "k_euler_ancestral" : s.sampler} onChange={e => patch({ sampler: e.target.value as typeof s.sampler })}>{SAMPLER_OPTIONS.filter(o => !modern || o.value !== "ddim_v3").map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></label>
     </div>
     <details><summary className="cursor-pointer text-xs text-muted">{t("Advanced settings")}</summary><div className="mt-4 space-y-4">
-      <NumericSlider label={t("Guidance rescale")} min={0} max={1} step={0.01} value={s.cfgRescale} onChange={cfgRescale => patch({ cfgRescale })} />
+      <NumericSlider label={t("Guidance rescale")} min={0} max={1} step={0.01} disabled={isMediumModel(s.model)} value={isMediumModel(s.model) ? 0 : s.cfgRescale} onChange={cfgRescale => patch({ cfgRescale })} />
       {!isV5Model(s.model) && <label className="block text-xs">{t("Noise schedule")}<Select value={s.noiseSchedule} onChange={e => patch({ noiseSchedule: e.target.value as typeof s.noiseSchedule })}>{NOISE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></label>}
       {!modern && <><SwitchRow label={t("Dynamic thresholding")} checked={s.dynamicThresholding} onCheckedChange={dynamicThresholding => patch({ dynamicThresholding })} /><SwitchRow label={t("Auto SMEA")} checked={s.autoSmea} onCheckedChange={autoSmea => patch({ autoSmea })} /></>}
     </div></details>

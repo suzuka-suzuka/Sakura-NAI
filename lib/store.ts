@@ -1,4 +1,5 @@
 "use client";
+import { effectiveEffortSettings } from "@/lib/nai/effort";
 
 import { translateUI } from "@/lib/i18n";
 import { pixelSnap } from "@/lib/pixel-snap";
@@ -602,7 +603,7 @@ export const useStore = create<Store>()((set, get) => ({
   clearError: () => set({ lastError: null }),
   generate: async (approved, submitted) => {
     const { client } = get();
-    const settings = structuredClone(approved?.settings ?? submitted ?? activeGenerationSettings(get().settings, get().enhancement));
+    const settings = structuredClone(effectiveEffortSettings(approved?.settings ?? submitted ?? activeGenerationSettings(get().settings, get().enhancement)));
     if (get().isGenerating || get().isPreparing || get().isDirectorProcessing || get().pendingPayment) return;
     if (!client || get().connectionStatus === "invalid") {
       set({ showConnect: true });

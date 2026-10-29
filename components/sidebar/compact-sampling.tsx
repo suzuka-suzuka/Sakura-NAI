@@ -2,6 +2,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, Dices, Sprout } from "lucide-react";
+import { isMediumModel } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { translateUI as t } from "@/lib/i18n";
 import { SAMPLER_OPTIONS, isV4Model, isV5Model } from "@/lib/nai/models";
@@ -87,14 +88,14 @@ export function CompactSampling({ onExpand }: { onExpand: () => void }) {
   const s = useStore(st => st.settings), patch = useStore(st => st.patchSettings), selected = useStore(st => st.selectedImage);
   const modern = isV5Model(s.model) || isV4Model(s.model);
   return <div aria-label={t("Quick sampling settings")} role="group" className="grid grid-cols-[38px_46px_minmax(64px,100px)_minmax(0,1fr)_20px] items-center gap-1.5 p-2.5 text-xs">
-    <label className="min-w-0"><span className="block text-muted">{t("Steps")}</span><InlineNumber label={t("Steps")} value={s.steps} min={1} max={50} onChange={steps => patch({ steps })} /></label>
+    <label className="min-w-0"><span className="block text-muted">{t("Steps")}</span>{isMediumModel(s.model) ? <span className="block h-7 py-1 font-bold">14</span> : <InlineNumber label={t("Steps")} value={s.steps} min={1} max={50} onChange={steps => patch({ steps })} />}</label>
     <label className="min-w-0"><span className="block whitespace-nowrap text-muted">{t("Guidance")}</span><InlineNumber label={t("Prompt guidance (CFG)")} value={s.scale} min={1} max={10} step={0.1} onChange={scale => patch({ scale })} /></label>
     <div className="min-w-0"><label htmlFor={seedId} className="block text-muted">{t("Seed")}</label><div className="flex items-center">
       <InlineNumber id={seedId} label={t("Seed")} value={s.seed} min={-1} max={4294967295} emptyValue={-1} onChange={seed => patch({ seed })} />
       <IconButton label={t(s.seed < 0 ? "Use the seed of the displayed image" : "Random seed")} size="sm" className="size-5 rounded-sm [&_svg]:size-3.5" disabled={s.seed < 0 && !selected}
         onClick={() => patch({ seed: s.seed < 0 ? selected?.seed ?? -1 : -1 })}>{s.seed < 0 ? <Sprout /> : <Dices />}</IconButton>
     </div></div>
-    <InlineSampler value={s.sampler} modern={modern} onChange={sampler => patch({ sampler })} />
+    {isMediumModel(s.model) ? <span className="text-xs text-muted">Euler Ancestral</span> : <InlineSampler value={s.sampler} modern={modern} onChange={sampler => patch({ sampler })} />}
     <IconButton label={t("Expand sampling")} aria-expanded={false} size="sm" className="w-5 rounded-sm" onClick={onExpand}><ChevronRight /></IconButton>
   </div>;
 }
