@@ -2,7 +2,7 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { DEFAULT_SETTINGS } from "../lib/nai/types";
-import { saveImages, loadImages, maintainGallery, deleteImage, clearImages, retentionPlan, imageBytes, type GalleryImage } from "../lib/db/gallery";
+import { saveImages, loadImages, getGalleryReport, deleteImage, clearImages, type GalleryImage } from "../lib/db/gallery";
 import { useStore } from "../lib/store";
 
 beforeEach(() => {
@@ -15,26 +15,16 @@ async function seed(count: number) {
   return saveImages(Array.from({ length: count }, (_, i) => picture(i)));
 }
 
-test("80% warning persists across reloads, resets below threshold, and count limit removes oldest", async () => {
-  assert.equal((await seed(159)).report.warn, false);
-  assert.equal((await saveImages([picture(159)])).report.warn, true);
-  assert.equal((await maintainGallery()).warn, false);
-  await deleteImage(1);
-  assert.equal((await saveImages([picture(160)])).report.warn, true);
-  const result = await saveImages(Array.from({ length: 40 }, (_, i) => picture(161 + i)));
-  assert.equal(result.report.count, 199);
-  assert.equal(result.report.deleted, 1);
-  assert.equal(result.report.ids.includes(2), false);
+test("history beyond the former limit remains stored and only explicit deletion removes images", async () => {
+  assert.equal((await seed(250)).report.count, 250);
+  await useStore.getState().loadGallery();
+  assert.equal(useStore.getState().galleryCount, 250);
+  assert.equal(useStore.getState().images.length, 40);
+  assert.equal((await saveImages([picture(251)])).report.count, 251);
+  assert.equal((await loadImages(2)).images[0].id, 1);
+  assert.equal((await deleteImage(1)).count, 250);
   await clearImages();
-  assert.equal((await maintainGallery()).count, 0);
-});
-
-test("capacity retention removes whole oldest batches and includes embedded settings in byte accounting", () => {
-  const plan = retentionPlan([{ id: 1, bytes: 20, batchId: 1 }, { id: 2, bytes: 20, batchId: 1 }, { id: 3, bytes: 60, batchId: 2 }], { count: 200, bytes: 100 });
-  assert.deepEqual(plan.kept.map(x => x.id), [3]);
-  assert.equal(plan.bytes, 60);
-  const img = picture(1);
-  assert.ok(imageBytes({ ...img, settings: { ...img.settings, prompt: "字".repeat(100) } }) > imageBytes(img) + 200);
+  assert.equal((await getGalleryReport()).count, 0);
 });
 
 test("pagination preserves batch boundary and is stable when new images arrive", async () => {
@@ -52,21 +42,28 @@ test("pagination preserves batch boundary and is stable when new images arrive",
   assert.equal(new Set([...first.images, ...second.images, ...last.images].map(x => x.id)).size, 51);
 });
 
-test("legacy database upgrades without losing history and supplies capacity metadata", async () => {
+for (const version of [1, 2]) test(`database v${version} upgrades without deleting image records`, async () => {
   await new Promise<void>((resolve, reject) => {
-    const req = indexedDB.open("nyanovel-images", 1);
-    req.onupgradeneeded = () => req.result.createObjectStore("images", { keyPath: "id", autoIncrement: true });
+    const req = indexedDB.open("nyanovel-images", version);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore("images", { keyPath: "id", autoIncrement: true });
+      if (version === 2) {
+        req.result.createObjectStore("image-info", { keyPath: "id" });
+        req.result.createObjectStore("gallery-state");
+      }
+    };
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
-      const db = req.result, tx = db.transaction("images", "readwrite");
-      tx.objectStore("images").add(picture(1));
+      const db = req.result, tx = db.transaction([...db.objectStoreNames], "readwrite");
+      for (let i = 1; i <= 220; i++) tx.objectStore("images").add(picture(i));
+      if (version === 2) tx.objectStore("image-info").put({ id: 1, batchId: 1, bytes: 600 * 1024 * 1024 });
       tx.oncomplete = () => { db.close(); resolve(); };
     };
   });
-  const report = await maintainGallery();
-  assert.equal(report.count, 1);
-  assert.ok(report.bytes > 0);
-  assert.equal((await loadImages()).images[0].filename, "1-0.png");
+  await useStore.getState().loadGallery();
+  assert.equal((await getGalleryReport()).count, 220);
+  assert.equal((await loadImages(2)).images[0].filename, "1-0.png");
+  assert.equal(useStore.getState().images.length, 40);
 });
 
 test("store loads only one page, merges more without duplicates, and clears unloaded records", async () => {
@@ -84,10 +81,11 @@ test("store loads only one page, merges more without duplicates, and clears unlo
 test("failed transaction rolls back new images and leaves existing history intact", async t => {
   await seed(5);
   const { IDBObjectStore } = await import("fake-indexeddb");
-  const original = IDBObjectStore.prototype.put;
-  t.mock.method(IDBObjectStore.prototype, "put", function(this: InstanceType<typeof IDBObjectStore>, ...args: Parameters<typeof original>) {
-    if (this.name === "gallery-state") this.transaction.abort();
-    else return original.apply(this, args);
+  const original = IDBObjectStore.prototype.count;
+  t.mock.method(IDBObjectStore.prototype, "count", function(this: InstanceType<typeof IDBObjectStore>, ...args: Parameters<typeof original>) {
+    const request = original.apply(this, args);
+    this.transaction.abort();
+    return request;
   });
   await assert.rejects(saveImages([picture(100)]));
   assert.equal((await loadImages()).images.length, 5);
@@ -101,28 +99,6 @@ test("failed persistence keeps generated result downloadable without rethrowing"
   assert.equal(useStore.getState().images[0].dataUrl, picture(1).dataUrl);
 });
 
-test("capacity alone triggers the warning once and pruning even with very few images", async () => {
-  await seed(2);
-  // Fixture represents large payload sizes without allocating hundreds of MiB in a unit test.
-  const setBytes = (bytes: number) => new Promise<void>((resolve, reject) => {
-    const req = indexedDB.open("nyanovel-images", 2);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const db = req.result, tx = db.transaction("image-info", "readwrite");
-      tx.objectStore("image-info").put({ id: 1, batchId: 0, bytes });
-      tx.oncomplete = () => { db.close(); resolve(); };
-    };
-  });
-  await setBytes(400 * 1024 * 1024);
-  assert.equal((await maintainGallery()).warn, true);
-  assert.equal((await maintainGallery()).warn, false);
-  await setBytes(500 * 1024 * 1024);
-  const report = await maintainGallery();
-  assert.equal(report.deleted, 1);
-  assert.equal(report.count, 1);
-  assert.equal((await loadImages()).images[0].batchId, 1);
-});
-
 test("clearing while a page is loading cannot resurrect deleted history", async () => {
   await seed(95);
   await useStore.getState().loadGallery();
@@ -132,14 +108,13 @@ test("clearing while a page is loading cannot resurrect deleted history", async 
   assert.equal(useStore.getState().galleryLoadingMore, false);
 });
 
-test("generation before history initialization still exposes older pages and prunes loaded originals", async () => {
+test("generation before history initialization still exposes older pages without pruning", async () => {
   await seed(198);
   await useStore.getState().appendGalleryImages([picture(199)]);
   assert.notEqual(useStore.getState().galleryNext, null);
   await useStore.getState().loadMoreGallery();
   assert.equal(useStore.getState().images.length, 41);
   await useStore.getState().appendGalleryImages([picture(200)]);
-  assert.equal(useStore.getState().galleryCount, 199);
-  assert.equal(useStore.getState().galleryIds!.includes(1), false);
-  assert.equal(useStore.getState().images.some(image => image.id === 1), false);
+  assert.equal(useStore.getState().galleryCount, 200);
+  assert.equal((await loadImages(2)).images[0].id, 1);
 });

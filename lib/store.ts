@@ -35,7 +35,7 @@ import { rememberEncoding, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import {
   loadImages,
   saveImages,
-  maintainGallery,
+  getGalleryReport,
   type GalleryReport,
   deleteImage as dbDelete,
   clearImages,
@@ -107,8 +107,7 @@ type Store = {
   // ---- gallery ----
   images: GalleryImage[];
   galleryCount: number;
-  galleryBytes: number;
-  galleryIds: number[] | null;
+  galleryClearRevision: number;
   galleryNext: number | null;
   galleryLoadingMore: boolean;
   galleryRevision: number;
@@ -357,8 +356,7 @@ export const useStore = create<Store>()((set, get) => ({
   // ---- gallery ----
   images: [],
   galleryCount: 0,
-  galleryBytes: 0,
-  galleryIds: null,
+  galleryClearRevision: 0,
   galleryNext: null,
   galleryLoadingMore: false,
   galleryRevision: 0,
@@ -367,22 +365,13 @@ export const useStore = create<Store>()((set, get) => ({
   selectedBatch: null,
   selectedImage: null,
   applyGalleryReport: (report) => {
-    const ids = new Set(report.ids);
-    set(s => ({
-      galleryCount: report.count, galleryBytes: report.bytes, galleryIds: report.ids,
-      images: s.images.filter(image => image.id !== undefined && (image.id < 0 || ids.has(image.id))),
-      selectedBatch: s.selectedBatch?.filter(image => image.id !== undefined && (image.id < 0 || ids.has(image.id))) ?? null,
-      selectedImage: s.selectedImage && s.selectedImage.id !== undefined && (s.selectedImage.id < 0 || ids.has(s.selectedImage.id)) ? s.selectedImage : null,
-      enhancement: s.enhancement && s.images.some(image => image.dataUrl === s.enhancement!.source.dataUrl && image.id !== undefined && image.id > 0 && !ids.has(image.id)) ? null : s.enhancement,
-    }));
-    if (report.deleted) toast.info(translateUI("History limit reached. Removed {0} oldest images.", report.deleted), { id: "gallery-limit" });
-    else if (report.warn) toast.warning(translateUI("Local history has reached 80% of its limit (200 images or 500 MiB). Oldest images will be deleted automatically at the limit."), { id: "gallery-warning", duration: 10000 });
+    set({ galleryCount: report.count });
   },
   loadGallery: async () => {
     const revision = get().galleryRevision + 1;
     set({ galleryStatus: "loading", galleryError: null, galleryRevision: revision, galleryLoadingMore: false });
     try {
-      const report = await maintainGallery();
+      const report = await getGalleryReport();
       const page = await loadImages();
       if (get().galleryRevision !== revision) return;
       get().applyGalleryReport(report);
@@ -421,7 +410,7 @@ export const useStore = create<Store>()((set, get) => ({
       const images = [...saved.slice().reverse(), ...s.images.filter(image => (image.id ?? 0) >= 0)];
       const oldestLoaded = Math.min(...images.filter(image => (image.id ?? 0) > 0).map(image => image.id!));
       // Generation can finish while the initial history read is still pending.
-      const galleryNext = s.galleryNext ?? (Number.isFinite(oldestLoaded) && s.galleryIds?.some(id => id < oldestLoaded) ? oldestLoaded : null);
+      const galleryNext = s.galleryNext ?? (Number.isFinite(oldestLoaded) && s.galleryCount > images.filter(image => (image.id ?? 0) > 0).length ? oldestLoaded : null);
       return { images, galleryNext, galleryStatus: "ready", galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false };
     });
     return saved;
@@ -489,6 +478,7 @@ export const useStore = create<Store>()((set, get) => ({
       return copy;
     };
 
+    const clearRevision = get().galleryClearRevision;
     let undone = false, deleting = false;
     const finishDelete = () => {
       if (undone || deleting) return;
@@ -501,7 +491,7 @@ export const useStore = create<Store>()((set, get) => ({
         label: translateUI("Undo"),
         onClick: () => {
           undone = true;
-          if (doomed.id! > 0 && get().galleryIds && !get().galleryIds!.includes(id)) return;
+          if (get().galleryClearRevision !== clearRevision) return;
           set((s) => ({
             images: reinsert(s.images, doomed, imageIndex),
             selectedBatch:
@@ -528,7 +518,7 @@ export const useStore = create<Store>()((set, get) => ({
     set(s => ({ galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false }));
     try {
       await clearImages();
-      set(s => ({ images: [], selectedBatch: null, selectedImage: null, enhancement: null, galleryCount: 0, galleryBytes: 0, galleryIds: [], galleryNext: null, galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false }));
+      set(s => ({ images: [], selectedBatch: null, selectedImage: null, enhancement: null, galleryCount: 0, galleryClearRevision: s.galleryClearRevision + 1, galleryNext: null, galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false }));
       toast.success(translateUI("Deleted {0} image{1}", n, n === 1 ? "" : "s"));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

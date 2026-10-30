@@ -17,7 +17,7 @@ export function HistoryPanel() {
   const selectBatch = useStore(s => s.selectBatch), selectImage = useStore(s => s.selectImage), setUI = useStore(s => s.setUI);
   const remove = useStore(s => s.deleteImage), clear = useStore(s => s.clearGallery), load = useStore(s => s.loadGallery);
   const [locked, setLocked] = useState(false), [confirm, setConfirm] = useState(false), [downloading, setDownloading] = useState(false);
-  const count = useStore(s => s.galleryCount), bytes = useStore(s => s.galleryBytes);
+  const count = useStore(s => s.galleryCount);
   const next = useStore(s => s.galleryNext), loadingMore = useStore(s => s.galleryLoadingMore), loadMore = useStore(s => s.loadMoreGallery);
   const newestId = images[0]?.id;
   const scroller = useRef<HTMLDivElement>(null);
@@ -67,7 +67,7 @@ export function HistoryPanel() {
       {next !== null && <Button size="sm" disabled={loadingMore} onClick={() => void loadMore()}>{t(loadingMore ? "Loading…" : "Load more history")}</Button>}
     </div>
     <div ref={footer} data-testid="history-footer" className="shrink-0 border-t border-border-soft">
-    <p className="px-2 pt-2 text-center text-[10px] text-muted">{t("{0}/200 images · {1}/500 MiB", count, (bytes / 1024 / 1024).toFixed(1))}</p>
+    <p className="px-2 pt-2 text-center text-[10px] text-muted">{t("{0} images in local history", count)}</p>
     <div className="flex justify-center p-1">
       <IconButton size="sm" label={t("Lock history scrolling")} aria-pressed={locked} onClick={() => setLocked(!locked)}>{locked ? <Lock /> : <LockOpen />}</IconButton>
       <IconButton size="sm" label={t("Download all images")} disabled={(!count && !images.length) || downloading} onClick={() => void downloadAll()}><Download /></IconButton>

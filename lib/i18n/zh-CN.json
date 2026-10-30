@@ -721,10 +721,8 @@
   "Clean imported tags": "清理导入标签",
   "What does tag cleanup change?": "标签清理会改什么？",
   "Trim outer whitespace and empty comma-separated entries in selected prompts and imported characters only. Keep weights, grouped text, tag order and repeated tags. Other settings are not reset.": "仅清理本次选中的提示词和导入角色中的首尾空白与空逗号项；保留权重、括号内文本、标签顺序和重复标签，不重置其他设置。",
-  "History limit reached. Removed {0} oldest images.": "历史记录已达上限，已自动删除最旧的 {0} 张图片。",
-  "Local history has reached 80% of its limit (200 images or 500 MiB). Oldest images will be deleted automatically at the limit.": "本地历史已达到上限的 80%（最多 200 张或 500 MiB）。达到上限时将自动删除最旧图片，请及时下载保存。",
   "Couldn't load more history: {0}": "加载更多历史失败：{0}",
   "Images generated, but local history could not be saved. Download the current images before generating again or leaving.": "图片已生成，但无法保存到本地历史。请在再次生成或离开页面前下载本次图片。",
   "Load more history": "加载更多历史",
-  "{0}/200 images · {1}/500 MiB": "{0}/200 张 · {1}/500 MiB"
+  "{0} images in local history": "本地历史共 {0} 张"
 }
