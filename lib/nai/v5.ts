@@ -5,6 +5,7 @@ import type { GenerationSettings } from "./types";
 import { isV5Model, maxSamples } from "./models";
 import { translateUI } from "../i18n";
 import { isGenerationSize } from "./dimensions";
+import { normalizePromptSettings } from "./prompt-weights";
 
 // Protocol references and capability boundaries are documented in docs/NAI-V5.md.
 // Keep V5 capabilities separate from legacy models.
@@ -28,7 +29,7 @@ export function v5Prompt(s: GenerationSettings) {
 }
 
 export function buildV5Payload(s: GenerationSettings, seed: number) {
-  s = effectiveEffortSettings(s);
+  s = normalizePromptSettings(effectiveEffortSettings(s));
   if (!isV5Model(s.model)) throw new Error("Not a V5 model");
   if (!isGenerationSize(s.width, s.height))
     throw new Error(translateUI("V5 dimensions must be multiples of 64, with at most 3,145,728 pixels."));

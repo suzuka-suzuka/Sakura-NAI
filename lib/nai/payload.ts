@@ -6,6 +6,7 @@ import { qualityText, negativeText } from "./presets";
 import { buildV5Payload } from "./v5";
 import { applyImageInput } from "./image-input";
 import { isGenerationDimension, MAX_GENERATION_PIXELS } from "./dimensions";
+import { normalizePromptSettings } from "./prompt-weights";
 
 export function buildPayload(s: GenerationSettings, seed: number): GenerationPayload {
   s = effectiveEffortSettings(s);
@@ -17,6 +18,7 @@ export function buildPayload(s: GenerationSettings, seed: number): GenerationPay
   if (s.width * s.height > MAX_GENERATION_PIXELS) throw new Error("Image dimensions must not exceed 3,145,728 pixels");
   if (!Number.isInteger(s.nSamples) || s.nSamples < 1 || s.nSamples > 8) throw new Error("Invalid batch size");
   const modern = isV4Model(s.model);
+  if (modern) s = normalizePromptSettings(s);
   const chars = s.characters.filter(c => c.enabled && c.prompt.trim());
   if (chars.length > maxCharacters(s.model)) throw new Error(`This model supports at most ${maxCharacters(s.model)} enabled characters`);
   const prompt = modern && s.promptMode === "furry" && !/^\s*fur dataset\b/i.test(s.prompt) ? `fur dataset, ${s.prompt}` : s.prompt;
