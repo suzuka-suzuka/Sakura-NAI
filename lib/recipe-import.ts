@@ -29,7 +29,7 @@ export function selectedRecipeSettings(current: GenerationSettings, recipe: Impo
   if (!selected) return structuredClone(current);
   if (options.settings) {
     const { prompt: _p, negativePrompt: _n, characters: _c, seed: _s, vibe: _v, directorReference: _r, imageSource: _i,
-      qualityToggle: _qt, qualityPreset: _qp, ucPreset: _uc, autoText: _at, useCoords: _coords, ...sampling } = incoming;
+      qualityToggle: _qt, qualityPreset: _qp, ucPreset: _uc, autoText: _at, useCoords: _coords, normalizeReferenceStrength: _normalize, ...sampling } = incoming;
     Object.assign(result, sampling);
     // Replacing sampling settings must not reuse an unrelated input or precise reference.
     result.directorReference = []; result.imageSource = null;
@@ -52,6 +52,7 @@ export function selectedRecipeSettings(current: GenerationSettings, recipe: Impo
   if (options.vibes && incoming.vibe.length) {
     if (result.imageSource?.mode === "infill") throw new Error("Vibe Transfer is unavailable during inpainting. Switch to text-to-image or Image2Image first.");
     result.vibe = [...(options.appendVibes ? current.vibe : []), ...structuredClone(incoming.vibe)];
+    result.normalizeReferenceStrength = incoming.normalizeReferenceStrength;
     if (result.vibe.length > MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
     result.model = compatibleVibeModel(result.vibe, result.model);
     result.directorReference = [];

@@ -285,6 +285,11 @@ export function recipeFromNovelAIMetadata(
   }
 
   let omittedVibes = false;
+  const normalizeReferenceStrength = boolean(pick(bag, "normalizeReferenceStrength", "normalize_reference_strength_multiple"));
+  if (normalizeReferenceStrength !== null) {
+    settings.normalizeReferenceStrength = normalizeReferenceStrength;
+    imported.add("Vibe strength normalization");
+  }
   try {
     settings.vibe = embeddedVibes(entries);
     if (!settings.vibe.length) settings.vibe = vibesFromMetadata({

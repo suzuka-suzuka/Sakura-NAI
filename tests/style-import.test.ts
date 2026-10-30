@@ -162,6 +162,25 @@ test("official naidata PNGs restore encoded Vibes independently of prompt and sa
   assert.equal(appended.vibe.length, 2);
 });
 
+test("Vibe normalization survives PNG metadata, selective import and Sakura presets", async () => {
+  for (const enabled of [true, false]) {
+    const s = settings({ model: Model.V4_5, normalizeReferenceStrength: enabled, vibe: refs() });
+    const payload = buildPayload(s, 42);
+    Object.assign(payload.parameters, { reference_image_multiple: ["AQID"], reference_strength_multiple: [0.6], reference_information_extracted_multiple: [0.88], normalize_reference_strength_multiple: enabled });
+    const bytes = await generationPngMetadata(new Uint8Array(Buffer.from(png, "base64")), payload, 0);
+    const metadata = await extractImageMetadata(new Blob([new Uint8Array(bytes)]));
+    const recipe = recipeFromNovelAIMetadata(metadata.entries, { width: 832, height: 1216 });
+    assert.equal(recipe.settings.normalizeReferenceStrength, enabled);
+    const current = settings({ normalizeReferenceStrength: !enabled });
+    assert.equal(selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, settings: false }).normalizeReferenceStrength, enabled);
+    assert.equal(selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, vibes: false }).normalizeReferenceStrength, !enabled);
+    for (const kind of ["vibe", "settings"] as const) {
+      const [preset] = parseStylePresets(exportStylePresets([createStylePreset("归一化", kind, s)]), "preset.json");
+      assert.equal(applyStylePreset(current, preset).normalizeReferenceStrength, enabled);
+    }
+  }
+});
+
 test("applying Vibes refuses inpainting and too many active characters without changing the current draft", () => {
   const preset = createStylePreset("参考", "vibe", settings({ vibe: refs() }));
   const inpainting = settings({ imageSource: { dataUrl: image.preview, width: 64, height: 64, mode: "infill", strength: 1, noise: 0, inpaintStrength: 1 } });

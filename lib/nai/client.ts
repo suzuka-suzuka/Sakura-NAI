@@ -216,6 +216,7 @@ export class NaiClient {
       }
       p.reference_image_multiple = images;
       p.reference_strength_multiple = s.vibe.map(r => r.strength);
+      if (isV4Model(s.model)) p.normalize_reference_strength_multiple = s.normalizeReferenceStrength ?? false;
       p.reference_information_extracted_multiple = s.vibe.map(r => r.informationExtracted);
     }
   }

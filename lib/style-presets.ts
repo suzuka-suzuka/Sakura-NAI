@@ -29,18 +29,19 @@ const settingsSchema = promptSchema.extend({
   sampler: z.enum(SAMPLER_OPTIONS.map(option => option.value)), noiseSchedule: z.enum(NOISE_OPTIONS.map(option => option.value)),
   scale: z.number().min(0).max(100), cfgRescale: unit, nSamples: z.number().int().min(1).max(8),
   dynamicThresholding: z.boolean(), autoSmea: z.boolean(), varietyPlus: z.boolean(), transparentBackground: z.boolean(), useCoords: z.boolean(),
+  normalizeReferenceStrength: z.boolean().default(false),
 }).refine(s => s.width * s.height <= MAX_GENERATION_PIXELS, "Image dimensions exceed the generation limit.");
 const common = { name: z.string().trim().min(1).max(200), id: z.string().max(200), createdAt: z.string().max(100) };
 const presetSchema = z.discriminatedUnion("kind", [
   z.object({ ...common, kind: z.literal("prompt"), settings: promptSchema }),
   z.object({ ...common, kind: z.literal("settings"), settings: settingsSchema }),
-  z.object({ ...common, kind: z.literal("vibe"), vibes: z.array(referenceSchema).min(1).max(MAX_VIBES) }),
+  z.object({ ...common, kind: z.literal("vibe"), vibes: z.array(referenceSchema).min(1).max(MAX_VIBES), normalizeReferenceStrength: z.boolean().optional() }),
 ]);
 export type StylePreset = z.infer<typeof presetSchema>;
 
 export function createStylePreset(name: string, kind: StylePreset["kind"], settings: GenerationSettings): StylePreset {
   return presetSchema.parse({ id: crypto.randomUUID(), name, kind, createdAt: new Date().toISOString(),
-    ...(kind === "vibe" ? { vibes: structuredClone(settings.vibe) } : { settings: { ...settings, qualityPreset: settings.qualityPreset ?? (settings.qualityToggle ? "standard" : "none") } }) });
+    ...(kind === "vibe" ? { vibes: structuredClone(settings.vibe), normalizeReferenceStrength: settings.normalizeReferenceStrength } : { settings: { ...settings, qualityPreset: settings.qualityPreset ?? (settings.qualityToggle ? "standard" : "none") } }) });
 }
 export function parseStylePresets(text: string, filename: string): StylePreset[] {
   if (/\.txt$/i.test(filename)) {
@@ -70,7 +71,7 @@ export function applyStylePreset(current: GenerationSettings, preset: StylePrese
     const vibe = [...(append ? current.vibe : []), ...structuredClone(preset.vibes)];
     const model = compatibleVibeModel(vibe, current.model);
     if (current.characters.filter(character => character.enabled && character.prompt.trim()).length > maxCharacters(model)) throw new Error("This Vibe needs a model with a limit of 6 active characters. Reduce the active characters first.");
-    return { ...current, model, vibe, directorReference: [] };
+    return { ...current, model, vibe, directorReference: [], normalizeReferenceStrength: preset.normalizeReferenceStrength ?? current.normalizeReferenceStrength };
   }
   const result: GenerationSettings = { ...structuredClone(current), ...structuredClone(preset.settings) };
   result.characters = [...(append && preset.kind === "prompt" ? current.characters : []), ...preset.settings.characters.map(character => ({ ...character, id: crypto.randomUUID() }))];

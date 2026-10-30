@@ -732,5 +732,7 @@
   "Couldn't load more history: {0}": "加载更多历史失败：{0}",
   "Images generated, but local history could not be saved. Download the current images before generating again or leaving.": "图片已生成，但无法保存到本地历史。请在再次生成或离开页面前下载本次图片。",
   "Load more history": "加载更多历史",
-  "{0} images in local history": "本地历史共 {0} 张"
+  "{0} images in local history": "本地历史共 {0} 张",
+  "Normalize Reference Strength Values": "参考强度归一化",
+  "Automatically normalize Vibe reference strengths to avoid excessive combined influence. Individual strength values stay unchanged.": "自动归一化 Vibe 参考强度，避免多张参考图叠加后影响过强。各张参考图的强度数值保持不变。"
 }

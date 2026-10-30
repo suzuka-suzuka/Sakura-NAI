@@ -109,6 +109,28 @@ test("client encodes V4 vibes once per model/image/extraction and sends cached e
   assert.equal(bodies.filter(c => c.path.endsWith("encode-vibe")).length, 1);
   assert.deepEqual((bodies[1].body.parameters as Record<string,unknown>).reference_image_multiple, ["AQID"]);
 });
+test("Vibe normalization sends an explicit toggle only for supported active Vibes without changing strengths", async (t) => {
+  const bodies: Record<string, unknown>[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    if (url.endsWith("encode-vibe")) return new Response(new Uint8Array([1, 2, 3]));
+    bodies.push(JSON.parse(String(init.body)).parameters);
+    return JSON.parse(String(init.body)).model === Model.V3
+      ? Response.json({ images: [{ image: btoa(String.fromCharCode(...png)) }] }) : streamed(frame(final()));
+  });
+  for (const model of [Model.V4, Model.V4_CUR, Model.V4_5, Model.V4_5_CUR, Model.V3, V5_FULL] as const) {
+    for (const enabled of [true, false]) {
+      const s = settings({ model, normalizeReferenceStrength: enabled, vibe: [0.8, 0.7].map(strength => ({ base64: "source", preview: "", strength, informationExtracted: 0.7 })) });
+      await collect((await new NaiClient(conn).generate(s)).events);
+      const p = bodies.at(-1)!;
+      assert.equal(p.normalize_reference_strength_multiple, model === Model.V3 || model === V5_FULL ? undefined : enabled);
+      if (model !== V5_FULL) assert.deepEqual(p.reference_strength_multiple, [0.8, 0.7]);
+      assert.deepEqual(s.vibe.map(ref => ref.strength), [0.8, 0.7]);
+    }
+  }
+  await collect((await new NaiClient(conn).generate(settings({ model: Model.V4_5, normalizeReferenceStrength: true }))).events);
+  assert.equal(bodies.at(-1)!.normalize_reference_strength_multiple, undefined);
+});
+
 test("precise reference modes survive storage and reach the request in image order, with legacy fallback", async (t) => {
   const globals = globalThis as unknown as Record<string, unknown>;
   const previous = { document: globals.document, createImageBitmap: globals.createImageBitmap };

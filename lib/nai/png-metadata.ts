@@ -79,6 +79,7 @@ const parameterKeys = [
   "v4_prompt", "v4_negative_prompt", "characterPrompts", "tag_hint_transparent_background",
   "strength", "noise", "extra_noise_seed", "inpaintImg2ImgStrength", "img2img", "upscaled_enhance",
   "reference_strength_multiple", "reference_information_extracted_multiple",
+  "normalize_reference_strength_multiple",
   "director_reference_strength_values", "director_reference_information_extracted",
 ] as const;
 

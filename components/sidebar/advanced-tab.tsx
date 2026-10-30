@@ -72,6 +72,12 @@ export function AdvancedTab() {
       {v5 ? <p className="text-xs text-muted">{translateUI("V5 does not support Vibe Transfer or character reference images yet. Saved references are kept for other models.")}</p> : <>
       <Section title={translateUI("Vibe transfer")} description={translateUI("{0} reference{1}", s.vibe.length, s.vibe.length === 1 ? "" : "s")} collapsible defaultOpen={s.vibe.length > 0}>
         <ReferenceUploader field="vibe" emptyLabel={translateUI("Transfer the vibe of reference images.")} />
+        {isV4Model(s.model) && <Field><SwitchRow
+          label={translateUI("Normalize Reference Strength Values")}
+          hint={translateUI("Automatically normalize Vibe reference strengths to avoid excessive combined influence. Individual strength values stay unchanged.")}
+          checked={s.normalizeReferenceStrength ?? false}
+          onCheckedChange={normalizeReferenceStrength => patch({ normalizeReferenceStrength })}
+        /></Field>}
       </Section>
 
       {s.model.includes("4-5") && <Section

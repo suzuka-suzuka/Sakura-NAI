@@ -74,6 +74,7 @@ export type GenerationSettings = {
   useCoords: boolean;
   characters: CharacterSetting[];
   vibe: ReferenceImage[];
+  normalizeReferenceStrength: boolean;
   directorReference: ReferenceImage[];
   imageSource?: ImageSource | null;
 };
@@ -103,6 +104,7 @@ export const DEFAULT_SETTINGS: GenerationSettings = {
   useCoords: false,
   characters: [],
   vibe: [],
+  normalizeReferenceStrength: false,
   directorReference: [],
   imageSource: null,
 };
