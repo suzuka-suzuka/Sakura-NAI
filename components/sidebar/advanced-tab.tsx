@@ -75,13 +75,13 @@ export function AdvancedTab() {
       </Section>
 
       {s.model.includes("4-5") && <Section
-        title={translateUI("Director / character reference")}
+        title={translateUI("Precise reference")}
         description={translateUI("{0} reference{1}", s.directorReference.length, s.directorReference.length === 1 ? "" : "s")}
         collapsible
         defaultOpen={s.directorReference.length > 0}
       >
-        {s.vibe.length > 0 && <p className="mb-2 text-xs text-muted">{translateUI("Character reference takes priority over Vibe Transfer.")}</p>}
-        <ReferenceUploader field="directorReference" emptyLabel={translateUI("Guide character features from a reference.")} />
+        {s.vibe.length > 0 && <p className="mb-2 text-xs text-muted">{translateUI("Precise reference takes priority over Vibe Transfer.")}</p>}
+        <ReferenceUploader field="directorReference" emptyLabel={translateUI("Guide character features, art style, or both from a reference.")} />
       </Section>}
       </>}
     </>

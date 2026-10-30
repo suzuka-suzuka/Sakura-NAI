@@ -12,6 +12,7 @@ import { decodeStream, decodeImages, NaiTransport } from "../lib/nai/transport";
 import { extractImageMetadata } from "../lib/nai/media";
 import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
 import { NaiClient } from "../lib/nai/client";
+import { validateStoredReferences } from "../lib/style-presets";
 
 const settings = (patch: Partial<GenerationSettings> = {}): GenerationSettings => ({ ...DEFAULT_SETTINGS, model: V5_FULL, prompt: "1girl", ...patch });
 const char = (uc = "") => ({ prompt: 'girl holding "Hello"', uc, enabled: true, center: { x: 0.123, y: 0.789 } });
@@ -108,6 +109,33 @@ test("client encodes V4 vibes once per model/image/extraction and sends cached e
   assert.equal(bodies.filter(c => c.path.endsWith("encode-vibe")).length, 1);
   assert.deepEqual((bodies[1].body.parameters as Record<string,unknown>).reference_image_multiple, ["AQID"]);
 });
+test("precise reference modes survive storage and reach the request in image order, with legacy fallback", async (t) => {
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const previous = { document: globals.document, createImageBitmap: globals.createImageBitmap };
+  globals.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {}, fillRect() {} }), toDataURL: () => new Image(png).toDataURL() }) };
+  globals.createImageBitmap = async () => ({ width: 832, height: 1216, close() {} });
+  t.after(() => { for (const [k,v] of Object.entries(previous)) { if (v === undefined) delete globals[k]; else globals[k] = v; } });
+  const references = validateStoredReferences(["character", "style", "character&style", undefined].map((referenceType, i) => ({
+    base64: btoa(String.fromCharCode(...png)), preview: "", referenceType, strength: (i + 1) / 4, informationExtracted: 1,
+  })));
+  assert.deepEqual(references.map(r => r.referenceType), ["character", "style", "character&style", undefined]);
+  assert.throws(() => validateStoredReferences([{ ...references[0], referenceType: "invalid" }]));
+  const bodies: Record<string, unknown>[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)).parameters);
+    return streamed(frame(final()));
+  });
+  for (const model of [Model.V4_5, Model.V4_5_CUR]) {
+    await collect((await new NaiClient(conn).generate(settings({ model, directorReference: references }))).events);
+  }
+  for (const p of bodies) {
+    assert.deepEqual(p.director_reference_descriptions, ["character", "style", "character&style", "character"].map(base_caption => ({ caption: { base_caption, char_captions: [] }, legacy_uc: false })));
+    assert.equal((p.director_reference_images as string[]).length, 4);
+    assert.deepEqual(p.director_reference_strength_values, [0.25, 0.5, 0.75, 1]);
+    assert.equal(p.reference_image_multiple, undefined);
+  }
+});
+
 test("client V5 never encodes dormant references; cancel aborts request and releases reader", async (t) => {
   let calls = 0, cancelled = false;
   t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {

@@ -190,7 +190,7 @@ export class NaiClient {
     const director = (s.model === Model.V4_5 || s.model === Model.V4_5_CUR) && s.directorReference.length > 0;
     if (director) {
       p.director_reference_images = await Promise.all(s.directorReference.map(r => prepareDirectorReference(r.base64)));
-      p.director_reference_descriptions = s.directorReference.map(() => ({ caption: { base_caption: "character", char_captions: [] }, legacy_uc: false }));
+      p.director_reference_descriptions = s.directorReference.map(r => ({ caption: { base_caption: r.referenceType ?? "character", char_captions: [] }, legacy_uc: false }));
       p.director_reference_strength_values = s.directorReference.map(r => r.strength);
       p.director_reference_secondary_strength_values = s.directorReference.map(() => 1);
       p.director_reference_information_extracted = s.directorReference.map(r => r.informationExtracted);

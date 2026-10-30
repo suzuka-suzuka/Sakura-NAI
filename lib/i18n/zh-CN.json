@@ -1,4 +1,12 @@
 {
+
+  "Precise reference": "精准参考",
+  "Reference type": "参考类型",
+  "Character reference": "角色参考",
+  "Style reference": "画风参考",
+  "Character & style reference": "角色＋画风参考",
+  "Guide character features, art style, or both from a reference.": "参考角色特征、画风，或同时参考两者。",
+  "Precise reference takes priority over Vibe Transfer.": "精准参考优先于氛围迁移。",
   "Effort": "生成模式",
   "High": "通常",
   "Medium": "节约",

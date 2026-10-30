@@ -15,6 +15,7 @@ import { isV5Model } from "@/lib/nai/models";
 import { Model } from "@/lib/nai/protocol";
 import { isVibeFile, VIBE_FILE_ACCEPT, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import { prepareStyleImport } from "@/lib/style-import";
+import type { ReferenceImage } from "@/lib/nai/types";
 
 /** Multi-image uploader for vibe transfer / director reference, with per-image sliders. */
 export function ReferenceUploader({
@@ -92,6 +93,14 @@ export function ReferenceUploader({
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <input aria-label={translateUI("Reference name")} value={r.name ?? ""} placeholder={`Vibe ${i + 1}`} maxLength={200} disabled={blocked} onChange={event => update(field, i, { name: event.target.value })} className="min-w-0 rounded bg-transparent text-xs outline-none focus:ring-1 focus:ring-accent" />
                 <fieldset disabled={blocked} className="space-y-2">
+                {!vibe && <label className="block text-xs text-muted">{translateUI("Reference type")}
+                  <Select aria-label={translateUI("Reference type")} value={r.referenceType ?? "character"}
+                    onChange={event => update(field, i, { referenceType: event.target.value as ReferenceImage["referenceType"] })}>
+                    <option value="character">{translateUI("Character reference")}</option>
+                    <option value="style">{translateUI("Style reference")}</option>
+                    <option value="character&style">{translateUI("Character & style reference")}</option>
+                  </Select>
+                </label>}
                 <Slider label={translateUI("Strength")} min={0} max={1} step={0.01} value={r.strength}
                   onValueChange={strength => update(field, i, { strength })} format={value => value.toFixed(2)} />
                 {vibe && !r.base64 ? <label className="block text-xs text-muted">{translateUI("Information extracted (saved encodings)")}

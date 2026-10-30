@@ -9,6 +9,7 @@ const unit = z.number().min(0).max(1);
 const image = z.string().max(64 * 1024 * 1024).refine(value => !value || /^[A-Za-z0-9+/]+={0,2}$/.test(value), "Invalid embedded image.");
 const preview = z.string().max(64 * 1024 * 1024).refine(value => !value || /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(value), "Invalid embedded preview.");
 const referenceSchema = z.object({
+  referenceType: z.enum(["character", "style", "character&style"]).optional(),
   base64: image, preview, strength: unit, informationExtracted: unit, name: z.string().max(200).optional(), sourceModel: modelSchema.optional(),
   encodings: z.array(z.object({ model: modelSchema.refine(isV4Model), informationExtracted: unit, data: z.string().transform(encodedData), key: z.string().max(200).optional() })).max(256).optional(),
 }).refine(ref => ref.base64 || ref.encodings?.length, "A Vibe needs an image or encoding.");

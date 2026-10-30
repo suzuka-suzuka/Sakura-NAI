@@ -32,6 +32,8 @@ export type ImageSource = {
 };
 
 export type ReferenceImage = {
+  /** Precise-reference target; omitted by older sessions (character only). */
+  referenceType?: "character" | "style" | "character&style";
   /** base64 (no data-url prefix) as returned by parseImage */
   base64: string;
   /** small data-url for previewing in the form */
