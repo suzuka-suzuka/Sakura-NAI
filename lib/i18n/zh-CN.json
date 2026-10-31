@@ -1,4 +1,7 @@
 {
+  "Automatically download generated images": "生成后自动下载图片",
+  "Save finished images with time-based filenames. Your browser may ask to allow multiple downloads.": "按时间命名并下载生成完成的图片。批量下载时，浏览器可能要求允许下载多个文件。",
+  "Automatic download failed. Download the images manually.": "自动下载未能启动，请手动下载图片。",
 
   "Precise reference": "精准参考",
   "Reference type": "参考类型",

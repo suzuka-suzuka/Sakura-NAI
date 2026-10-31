@@ -448,3 +448,28 @@ test("preview off uses generate-image and removes the stream parameter", async t
   const events = []; for await (const event of handle.events) events.push(event);
   assert.equal(events.length, 1);
 });
+
+
+test("automatic downloads cover completed samples and download errors do not fail generation", async t => {
+  setup(t, { nSamples: 2 });
+  useStore.getState().patchPreferences({ autoDownload: true, confirmPaid: false });
+  let downloads = 0;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: {
+    createElement: () => ({ href: "", download: "", click() { downloads++; } }),
+    body: { appendChild() {}, removeChild() {} },
+  } });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, "document", previous); else Reflect.deleteProperty(globalThis, "document"); });
+  t.mock.method(globalThis, "setTimeout", (() => 0) as unknown as typeof setTimeout);
+  t.mock.method(URL, "createObjectURL", () => "blob:test");
+  await useStore.getState().generate();
+  assert.equal(downloads, 2);
+  assert.equal(useStore.getState().selectedBatch?.length, 2);
+  assert.equal(useStore.getState().lastError, null);
+  t.mock.method(URL, "createObjectURL", () => { throw new Error("Download unavailable"); });
+  const errors = t.mock.method(toast, "error", () => 0);
+  await useStore.getState().generate();
+  assert.equal(useStore.getState().selectedBatch?.length, 2);
+  assert.equal(useStore.getState().lastError, null);
+  assert.equal(errors.mock.calls.length, 1);
+});

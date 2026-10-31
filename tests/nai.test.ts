@@ -131,7 +131,7 @@ test("Vibe normalization sends an explicit toggle only for supported active Vibe
   assert.equal(bodies.at(-1)!.normalize_reference_strength_multiple, undefined);
 });
 
-test("precise reference modes survive storage and reach the request in image order, with legacy fallback", async (t) => {
+test("precise reference modes survive storage and reach the request in image order, defaulting to character and style", async (t) => {
   const globals = globalThis as unknown as Record<string, unknown>;
   const previous = { document: globals.document, createImageBitmap: globals.createImageBitmap };
   globals.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {}, fillRect() {} }), toDataURL: () => new Image(png).toDataURL() }) };
@@ -151,7 +151,7 @@ test("precise reference modes survive storage and reach the request in image ord
     await collect((await new NaiClient(conn).generate(settings({ model, directorReference: references }))).events);
   }
   for (const p of bodies) {
-    assert.deepEqual(p.director_reference_descriptions, ["character", "style", "character&style", "character"].map(base_caption => ({ caption: { base_caption, char_captions: [] }, legacy_uc: false })));
+    assert.deepEqual(p.director_reference_descriptions, ["character", "style", "character&style", "character&style"].map(base_caption => ({ caption: { base_caption, char_captions: [] }, legacy_uc: false })));
     assert.equal((p.director_reference_images as string[]).length, 4);
     assert.deepEqual(p.director_reference_strength_values, [0.25, 0.5, 0.75, 1]);
     assert.equal(p.reference_image_multiple, undefined);

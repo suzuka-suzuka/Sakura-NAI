@@ -1,7 +1,7 @@
 "use client";
 
 import { translateUI, useLocale } from "@/lib/i18n";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useFocusTrap, useDelayedUnmount } from "@/lib/use-overlay";
@@ -36,6 +36,29 @@ export function Modal({
   const panelRef = useFocusTrap<HTMLDivElement>(open);
   const titleId = useId();
   const descId = useId();
+  const shellRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const viewport = window.visualViewport;
+    const resize = () => {
+      const shell = shellRef.current;
+      if (!shell) return;
+      shell.style.height = `${viewport?.height ?? window.innerHeight}px`;
+      shell.style.top = `${viewport?.offsetTop ?? 0}px`;
+      shell.style.left = `${viewport?.offsetLeft ?? 0}px`;
+      shell.style.width = `${viewport?.width ?? window.innerWidth}px`;
+    };
+    resize();
+    viewport?.addEventListener("resize", resize);
+    viewport?.addEventListener("scroll", resize);
+    window.addEventListener("resize", resize);
+    return () => {
+      viewport?.removeEventListener("resize", resize);
+      viewport?.removeEventListener("scroll", resize);
+      window.removeEventListener("resize", resize);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +77,7 @@ export function Modal({
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="nai-modal-shell fixed inset-0 z-50 flex items-center justify-center p-4" data-state={open ? "open" : "closed"}>
+    <div ref={shellRef} className="nai-modal-shell fixed inset-0 z-50 flex items-center justify-center p-4" data-state={open ? "open" : "closed"}>
       <div
         className={cn(
           "absolute inset-0 bg-black/55 backdrop-blur-sm transition-opacity ease-in",

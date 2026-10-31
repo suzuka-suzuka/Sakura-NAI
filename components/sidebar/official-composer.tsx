@@ -141,7 +141,7 @@ export function ImageInputPanel() {
           {source.focused && <span className="mt-1 block text-muted">{t("Upscale the masked region for detail, then blend it back. Pixels beyond the softened edge stay intact.")}</span>}</label>}
       </div>}
     </div>
-    {!isV5Model(s.model) ? <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details> : s.vibe.length > 0 && <p className="text-xs text-muted">{t("{0} saved Vibe(s). V5 does not use them; open Styles and presets to apply them with a compatible model.", s.vibe.length)}</p>}
+    {!isV5Model(s.model) ? <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}{s.vibe.length > 0 && ` (${s.vibe.length})`}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details> : s.vibe.length > 0 && <p className="text-xs text-muted">{t("{0} saved Vibe(s). V5 does not use them; open Styles and presets to apply them with a compatible model.", s.vibe.length)}</p>}
     {s.model.includes("4-5") && <details open={s.directorReference.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Precise reference")}</summary><ReferenceUploader field="directorReference" emptyLabel={t("Guide character features, art style, or both from a reference.")} /></details>}
   </section>;
 }

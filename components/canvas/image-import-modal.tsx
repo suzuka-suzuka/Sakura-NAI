@@ -100,6 +100,7 @@ function ParameterImport({ busy, recipe, options, setOptions }: {
   if (hasVibes) preview.push(["Vibe strengths", recipe.settings.vibe.map(ref => ref.strength).join(", ")]);
   if (recipe.settings.characters.length) preview.push(["Character positions", recipe.settings.useCoords ? "ON" : "OFF"]);
   return <div className="mb-4 space-y-3 rounded-[var(--radius-card)] border border-border-soft p-3">
+    <div className="sticky top-0 z-10 bg-surface py-2"><Button className="h-auto min-h-11 w-full whitespace-normal py-2" disabled={busy || !hasSelection || confirmSeed || !!vibeError} onClick={() => applyImageImport("recipe", options)}>{t("Import metadata")}</Button></div>
     <div>
       <p className="text-sm font-semibold text-accent">{t("Generation parameters found")}</p>
       <p className="mt-1 text-xs text-muted">{t("Choose which prompts and settings to import.")}</p>
@@ -150,7 +151,6 @@ function ParameterImport({ busy, recipe, options, setOptions }: {
         </div>
       </div>
       <div className="space-y-2">
-        <Button className="h-auto min-h-11 w-full whitespace-normal py-2" disabled={busy || !hasSelection || confirmSeed || !!vibeError} onClick={() => applyImageImport("recipe", options)}>{t("Import metadata")}</Button>
         {checkbox("cleanTags", "Clean imported tags")}
         <details className="text-xs leading-relaxed text-muted">
           <summary className="cursor-pointer py-1">{t("What does tag cleanup change?")}</summary>

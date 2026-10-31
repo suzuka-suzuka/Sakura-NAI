@@ -23,6 +23,7 @@ export function AdvancedTab() {
   return (
     <>
       <Section title={translateUI("Generation and preview")}>
+        <Field><SwitchRow label={translateUI("Automatically download generated images")} hint={translateUI("Save finished images with time-based filenames. Your browser may ask to allow multiple downloads.")} checked={preferences.autoDownload} onCheckedChange={autoDownload => patchPreferences({ autoDownload })} /></Field>
         <Field><SwitchRow label={translateUI("Prompt autocomplete")} hint={translateUI("Suggest tags while typing in prompt fields.")} checked={preferences.tagAutocomplete} onCheckedChange={tagAutocomplete => patchPreferences({ tagAutocomplete })} /></Field>
         <Field><SwitchRow label={translateUI("Streaming preview")} hint={translateUI("When off, keep the previous image until the new batch is complete.")} checked={preferences.streamPreview} onCheckedChange={streamPreview => patchPreferences({ streamPreview })} /></Field>
         <Field><SwitchRow label={translateUI("Confirm paid generation")} hint={translateUI("Ask once when switching from 0 points to a paid generation.")} checked={preferences.confirmPaid} onCheckedChange={confirmPaid => patchPreferences({ confirmPaid })} /></Field>
@@ -72,12 +73,6 @@ export function AdvancedTab() {
       {v5 ? <p className="text-xs text-muted">{translateUI("V5 does not support Vibe Transfer or character reference images yet. Saved references are kept for other models.")}</p> : <>
       <Section title={translateUI("Vibe transfer")} description={translateUI("{0} reference{1}", s.vibe.length, s.vibe.length === 1 ? "" : "s")} collapsible defaultOpen={s.vibe.length > 0}>
         <ReferenceUploader field="vibe" emptyLabel={translateUI("Transfer the vibe of reference images.")} />
-        {isV4Model(s.model) && <Field><SwitchRow
-          label={translateUI("Normalize Reference Strength Values")}
-          hint={translateUI("Automatically normalize Vibe reference strengths to avoid excessive combined influence. Individual strength values stay unchanged.")}
-          checked={s.normalizeReferenceStrength ?? false}
-          onCheckedChange={normalizeReferenceStrength => patch({ normalizeReferenceStrength })}
-        /></Field>}
       </Section>
 
       {s.model.includes("4-5") && <Section

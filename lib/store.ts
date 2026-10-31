@@ -2,6 +2,7 @@
 import { effectiveEffortSettings } from "@/lib/nai/effort";
 
 import { translateUI } from "@/lib/i18n";
+import { downloadGeneratedImages } from "@/lib/image-actions";
 import { pixelSnap } from "@/lib/pixel-snap";
 import { readImageDimensions } from "@/lib/nai/image-decode";
 import { base64ToBytes, Image as NaiImage } from "@/lib/nai/protocol";
@@ -339,6 +340,7 @@ export const useStore = create<Store>()((set, get) => ({
   }),
   addReference: (field, ref) => {
     if (get().settings[field].length >= MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
+    if (field === "directorReference") ref = { ...ref, referenceType: ref.referenceType ?? "character&style" };
     set((s) => ({ settings: { ...s.settings, [field]: [...s.settings[field], ref] } }));
   },
   updateReference: (field, i, patch) =>
@@ -691,6 +693,7 @@ export const useStore = create<Store>()((set, get) => ({
       // moment it resolves; on wide layouts it remains a useful persistent confirmation/history.
       const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
       set({ selectedBatch: saved, selectedImage: saved[0], galleryOpen: !compact });
+      if (get().preferences.autoDownload) downloadGeneratedImages(saved);
       return saved;
     };
 
@@ -840,6 +843,7 @@ export const useStore = create<Store>()((set, get) => ({
         pending.push(img);
       }
       const saved = await get().appendGalleryImages(pending);
+      if (get().preferences.autoDownload) downloadGeneratedImages(saved);
       set(() => ({
         selectedBatch: saved,
         selectedImage: saved[0],

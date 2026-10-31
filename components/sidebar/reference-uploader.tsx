@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Slider } from "@/components/ui/slider";
 import { Select } from "@/components/ui/select";
-import { isV5Model } from "@/lib/nai/models";
+import { isV4Model, isV5Model } from "@/lib/nai/models";
 import { Model } from "@/lib/nai/protocol";
 import { isVibeFile, VIBE_FILE_ACCEPT, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import { prepareStyleImport } from "@/lib/style-import";
@@ -33,6 +33,7 @@ export function ReferenceUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
   const model = useStore(s => s.settings.model), patch = useStore(s => s.patchSettings);
+  const normalizeReferenceStrength = useStore(s => s.settings.normalizeReferenceStrength);
   const blocked = useStore(s => s.isGenerating || s.isPreparing || s.isDirectorProcessing || !!s.pendingPayment);
   const hasCharacterReferences = useStore(s => s.settings.directorReference.length > 0);
   const vibe = field === "vibe", v5 = isV5Model(model);
@@ -66,6 +67,15 @@ export function ReferenceUploader({
 
   return (
     <div>
+      {vibe && isV4Model(model) && <label
+        className="my-3 flex cursor-pointer items-start gap-2 text-[13px] font-semibold text-fg-2"
+        title={translateUI("Automatically normalize Vibe reference strengths to avoid excessive combined influence. Individual strength values stay unchanged.")}
+      >
+        <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-accent"
+          checked={normalizeReferenceStrength ?? false}
+          onChange={event => patch({ normalizeReferenceStrength: event.target.checked })} />
+        <span>{translateUI("Normalize Reference Strength Values")}</span>
+      </label>}
       <input
         ref={inputRef}
         type="file"
@@ -93,12 +103,12 @@ export function ReferenceUploader({
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <input aria-label={translateUI("Reference name")} value={r.name ?? ""} placeholder={`Vibe ${i + 1}`} maxLength={200} disabled={blocked} onChange={event => update(field, i, { name: event.target.value })} className="min-w-0 rounded bg-transparent text-xs outline-none focus:ring-1 focus:ring-accent" />
                 <fieldset disabled={blocked} className="space-y-2">
-                {!vibe && <label className="block text-xs text-muted">{translateUI("Reference type")}
-                  <Select aria-label={translateUI("Reference type")} value={r.referenceType ?? "character"}
+                {!vibe && <label className="block space-y-1 text-xs text-muted">{translateUI("Reference type")}
+                  <Select className="h-8 py-0 pl-2 pr-8 text-xs" aria-label={translateUI("Reference type")} value={r.referenceType ?? "character&style"}
                     onChange={event => update(field, i, { referenceType: event.target.value as ReferenceImage["referenceType"] })}>
+                    <option value="character&style">{translateUI("Character & style reference")}</option>
                     <option value="character">{translateUI("Character reference")}</option>
                     <option value="style">{translateUI("Style reference")}</option>
-                    <option value="character&style">{translateUI("Character & style reference")}</option>
                   </Select>
                 </label>}
                 <Slider label={translateUI("Strength")} min={0} max={1} step={0.01} value={r.strength}
