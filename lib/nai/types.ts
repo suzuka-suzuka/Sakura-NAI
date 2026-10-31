@@ -39,6 +39,8 @@ export type ReferenceImage = {
   /** small data-url for previewing in the form */
   preview: string;
   strength: number;
+  /** Precise Reference fidelity; absent legacy values default to full fidelity. */
+  fidelity?: number;
   informationExtracted: number;
   name?: string;
   /** Original pixels may be absent in encodings exported by NovelAI or embedded in PNGs. */

@@ -81,6 +81,7 @@ const parameterKeys = [
   "reference_strength_multiple", "reference_information_extracted_multiple",
   "normalize_reference_strength_multiple",
   "director_reference_strength_values", "director_reference_information_extracted",
+  "director_reference_secondary_strength_values", "director_reference_descriptions",
 ] as const;
 
 /** Save the effective request recipe even if the source/upstream image had no metadata. */

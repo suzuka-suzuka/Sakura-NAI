@@ -138,7 +138,7 @@ test("precise reference modes survive storage and reach the request in image ord
   globals.createImageBitmap = async () => ({ width: 832, height: 1216, close() {} });
   t.after(() => { for (const [k,v] of Object.entries(previous)) { if (v === undefined) delete globals[k]; else globals[k] = v; } });
   const references = validateStoredReferences(["character", "style", "character&style", undefined].map((referenceType, i) => ({
-    base64: btoa(String.fromCharCode(...png)), preview: "", referenceType, strength: (i + 1) / 4, informationExtracted: 1,
+    base64: btoa(String.fromCharCode(...png)), preview: "", referenceType, strength: (i + 1) / 4, informationExtracted: 0.3, fidelity: [0, 0.25, 1, undefined][i],
   })));
   assert.deepEqual(references.map(r => r.referenceType), ["character", "style", "character&style", undefined]);
   assert.throws(() => validateStoredReferences([{ ...references[0], referenceType: "invalid" }]));
@@ -154,6 +154,8 @@ test("precise reference modes survive storage and reach the request in image ord
     assert.deepEqual(p.director_reference_descriptions, ["character", "style", "character&style", "character&style"].map(base_caption => ({ caption: { base_caption, char_captions: [] }, legacy_uc: false })));
     assert.equal((p.director_reference_images as string[]).length, 4);
     assert.deepEqual(p.director_reference_strength_values, [0.25, 0.5, 0.75, 1]);
+    assert.deepEqual(p.director_reference_secondary_strength_values, [1, 0.75, 0, 0]);
+    assert.deepEqual(p.director_reference_information_extracted, [1, 1, 1, 1]);
     assert.equal(p.reference_image_multiple, undefined);
   }
 });

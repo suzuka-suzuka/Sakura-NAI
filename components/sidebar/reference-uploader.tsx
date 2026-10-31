@@ -118,12 +118,12 @@ export function ReferenceUploader({
                     {[...new Set((r.encodings ?? []).map(encoding => encoding.informationExtracted))].sort((a,b) => a-b).map(value => <option key={value} value={value}>{value.toFixed(2)}</option>)}
                   </Select>
                 </label> : <Slider
-                  label={translateUI("Info extracted")}
+                  label={translateUI(vibe ? "Info extracted" : "Fidelity")}
                   min={0}
                   max={1}
                   step={0.01}
-                  value={r.informationExtracted}
-                  onValueChange={(v) => update(field, i, { informationExtracted: v })}
+                  value={vibe ? r.informationExtracted : (r.fidelity ?? 1)}
+                  onValueChange={(v) => update(field, i, vibe ? { informationExtracted: v } : { fidelity: v })}
                   format={(v) => v.toFixed(2)}
                 />}
                 </fieldset>
