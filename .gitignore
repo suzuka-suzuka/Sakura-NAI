@@ -29,7 +29,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # caches
 .eslintcache
 .cache
+.tmp
 *.tsbuildinfo
+
+# local API diagnostics and generated test images
+/tmp/vibe-diagnosis/
 
 # local tooling state
 .serena

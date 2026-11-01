@@ -83,6 +83,19 @@ function readModel(value: unknown): GenerationModel | null {
   if (MODEL_VALUES.has(raw as GenerationModel)) return raw as GenerationModel;
 
   const normalized = raw.toLowerCase();
+  // Official Source labels omit Full/Curated; resolve their known hashes before
+  // falling back to the family name (including early V4.5 labels named V4).
+  // Mapping: https://novelai.net/inspect (official model metadata importer).
+  const v4SourceModels: Record<string, GenerationModel> = {
+    "7abffa2a": Model.V4_CUR, "c1ccba86": Model.V4_CUR, "770a9e12": Model.V4_CUR,
+    "37442fca": Model.V4, "4f49ec75": Model.V4, "ca4b7203": Model.V4,
+    "79f47848": Model.V4, "f6302a9d": Model.V4,
+    "c02d4f98": Model.V4_5_CUR, "5ab81c7c": Model.V4_5_CUR, "b5a2a797": Model.V4_5_CUR,
+    "4bde2a90": Model.V4_5, "1229b44f": Model.V4_5,
+    "b9f340fd": Model.V4_5, "f3d95188": Model.V4_5,
+  };
+  const sourceHash = /(?:novelai diffusion v4(?:\.5)?|diffusionmodelmetaname\.naiv4next) ([0-9a-f]{8})$/.exec(normalized)?.[1];
+  if (sourceHash && v4SourceModels[sourceHash]) return v4SourceModels[sourceHash];
   if (/93f4bd30|70ab5786/.test(normalized) || (/diffusion[- ]?5|\bv5\b/.test(normalized) && normalized.includes("medium"))) return V5_FULL_MEDIUM;
   const curated = normalized.includes("curated");
   if (/diffusion[- ]?5|\bv5\b/.test(normalized)) return curated ? V5_CURATED : V5_FULL;
