@@ -169,13 +169,14 @@ type Store = {
   imageEditor: { mode: "draw" | "mask"; source: string | null } | null;
   imageImport: ImageImportCandidate | null;
   showStyleLibrary: boolean;
+  styleAppend: boolean;
   styleImport: StyleImportCandidate | null;
   focusedIndex: number | null;
   setUI: (
     patch: Partial<
       Pick<
         Store,
-        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor" | "imageImport" | "showStyleLibrary" | "styleImport"
+        "settingsCollapsed" | "activeTab" | "galleryOpen" | "combinedPrompts" | "negativePromptActive" | "showConnect" | "showDirector" | "focusedIndex" | "showPositions" | "imageEditor" | "imageImport" | "showStyleLibrary" | "styleImport" | "styleAppend"
       >
     >,
   ) => void;
@@ -872,6 +873,7 @@ export const useStore = create<Store>()((set, get) => ({
   imageEditor: null,
   imageImport: null,
   showStyleLibrary: false,
+  styleAppend: true,
   styleImport: null,
   focusedIndex: null,
   setUI: (patch) => set(patch),
@@ -915,7 +917,7 @@ if (typeof window !== "undefined") {
   let storageWarning = false;
 
   useStore.subscribe((s) => {
-    const uiKey = `${s.settingsCollapsed}|${s.activeTab}|${s.galleryOpen}|${s.combinedPrompts}`;
+    const uiKey = `${s.settingsCollapsed}|${s.activeTab}|${s.galleryOpen}|${s.combinedPrompts}|${s.styleAppend}`;
     if (s.settings === last && uiKey === lastUI) return;
     last = s.settings;
     lastUI = uiKey;
@@ -935,6 +937,7 @@ if (typeof window !== "undefined") {
         activeTab: s.activeTab,
         galleryOpen: s.galleryOpen,
         combinedPrompts: s.combinedPrompts,
+        styleAppend: s.styleAppend,
       });
     }, 400);
   });

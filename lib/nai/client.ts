@@ -100,7 +100,7 @@ export function saveSettings(s: GenerationSettings) {
 
 const UI_KEY = "nya-ui";
 
-export type UIPrefs = { settingsCollapsed: boolean; activeTab: "basic" | "advanced"; galleryOpen: boolean; combinedPrompts: boolean };
+export type UIPrefs = { settingsCollapsed: boolean; activeTab: "basic" | "advanced"; galleryOpen: boolean; combinedPrompts: boolean; styleAppend: boolean };
 
 export function loadUIPrefs(): UIPrefs | null {
   if (typeof localStorage === "undefined") return null;
@@ -109,14 +109,14 @@ export function loadUIPrefs(): UIPrefs | null {
     if (!raw) return null;
     const saved = JSON.parse(raw);
     // Old character-tab selections now open the combined prompt section.
-    return { settingsCollapsed: !!saved.settingsCollapsed, activeTab: saved.activeTab === "advanced" ? "advanced" : "basic", galleryOpen: !!saved.galleryOpen, combinedPrompts: saved.combinedPrompts === true };
+    return { settingsCollapsed: !!saved.settingsCollapsed, activeTab: saved.activeTab === "advanced" ? "advanced" : "basic", galleryOpen: !!saved.galleryOpen, combinedPrompts: saved.combinedPrompts === true, styleAppend: saved.styleAppend !== false };
   } catch {
     return null;
   }
 }
 
 /**
- * Panel layout only. Notably absent: `focusedIndex` — restoring an open lightbox over an image the
+ * Panel layout and interaction preferences. Notably absent: `focusedIndex` — restoring an open lightbox over an image the
  * user didn't ask to see is hostile — and `showConnect`, which is derived from whether a client exists.
  */
 export function saveUIPrefs(p: UIPrefs) {

@@ -227,7 +227,7 @@ test("legacy character-tab preference migrates to the combined prompt panel", t 
   const old = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: () => JSON.stringify({ activeTab: "characters", settingsCollapsed: false, galleryOpen: true }) } });
   t.after(() => { if (old) Object.defineProperty(globalThis, "localStorage", old); else Reflect.deleteProperty(globalThis, "localStorage"); });
-  assert.deepEqual(loadUIPrefs(), { activeTab: "basic", settingsCollapsed: false, galleryOpen: true, combinedPrompts: false });
+  assert.deepEqual(loadUIPrefs(), { activeTab: "basic", settingsCollapsed: false, galleryOpen: true, combinedPrompts: false, styleAppend: true });
 });
 test("account response validation never guesses Opus from an invalid payload", () => {
   assert.throws(() => parseAccount({}), /Invalid/);

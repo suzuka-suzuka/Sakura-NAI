@@ -35,7 +35,8 @@ function LibraryContent() {
   const presets = useStore(s => s.stylePresets), status = useStore(s => s.styleStatus), pending = useStore(s => s.styleImport);
   const save = useStore(s => s.saveStylePresets), remove = useStore(s => s.deleteStylePreset);
   const running = useStore(s => s.isGenerating || s.isPreparing || s.isDirectorProcessing || !!s.pendingPayment);
-  const [saving, setSaving] = useState(false), [append, setAppend] = useState(true), [query, setQuery] = useState("");
+  const append = useStore(s => s.styleAppend);
+  const [saving, setSaving] = useState(false), [query, setQuery] = useState("");
   const [name, setName] = useState(""), [kind, setKind] = useState<StylePreset["kind"]>("prompt");
   const [prompt, setPrompt] = useState(settings.prompt), [negative, setNegative] = useState(settings.negativePrompt);
   const [editing, setEditing] = useState<string | null>(null), [renamed, setRenamed] = useState("");
@@ -84,8 +85,8 @@ function LibraryContent() {
     {status === "error" && <p role="alert" className="text-sm text-danger">{t("Local storage is unavailable. You can apply imports, but presets cannot be saved in this browser.")}</p>}
     <fieldset disabled={disabled} className="flex flex-wrap gap-4 text-sm">
       <legend className="sr-only">{t("How to apply")}</legend>
-      <label className="flex items-center gap-2"><input type="radio" name="style-mode" checked={append} onChange={() => setAppend(true)} className="accent-accent" />{t("Append tags / Vibes")}</label>
-      <label className="flex items-center gap-2"><input type="radio" name="style-mode" checked={!append} onChange={() => setAppend(false)} className="accent-accent" />{t("Replace tags / Vibes")}</label>
+      <label className="flex items-center gap-2"><input type="radio" name="style-mode" checked={append} onChange={() => setUI({ styleAppend: true })} className="accent-accent" />{t("Append tags / Vibes")}</label>
+      <label className="flex items-center gap-2"><input type="radio" name="style-mode" checked={!append} onChange={() => setUI({ styleAppend: false })} className="accent-accent" />{t("Replace tags / Vibes")}</label>
     </fieldset>
     {settings.directorReference.length > 0 && <p className="text-xs text-muted">{t("Applying Vibes replaces the current character references.")}</p>}
     {pending && <section className="space-y-3 rounded-xl border border-accent/40 p-3 sm:p-4" aria-label={t("Import preview")}>
