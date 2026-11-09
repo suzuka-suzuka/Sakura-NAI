@@ -141,6 +141,8 @@ On macOS, Command also works in place of Ctrl. Brackets do not toggle panels whi
 
 The gallery does not synchronize across browsers or devices. Different domains, ports, or browsers have separate storage. Clearing site data also removes the local gallery; download images you want to keep.
 
+On HTTPS/localhost browsers supporting the file save picker, **Download all images** asks for a destination and streams history one image at a time into a ZIP64 file without building the entire archive in memory. Other browsers start with independent ZIP archives of approximately 512 MiB. Catchable allocation or Blob construction failures automatically reduce the target to 256, 128, then 64 MiB and retry only unsaved images; subsequent parts keep the reduced size. Save each part to continue, with no size setting required. A browser tab terminated by the operating system cannot recover within the same page. Export shows the processed count and supports cancellation. Previously downloaded parts remain available. Keep the page open until export finishes.
+
 Internal storage keys and the gallery database name are retained from earlier versions so existing data survives upgrades. The product name and new download filenames use Sakura. A custom host receives your token and request contents, so use a service you trust.
 
 ## Development

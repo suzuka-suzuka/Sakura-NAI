@@ -92,6 +92,20 @@ export function deleteImage(id: number): Promise<GalleryReport> {
     tx.objectStore(STORE).delete(id); readReport(tx, done);
   });
 }
+/** Export one record per transaction, without retaining whole generation batches. */
+export function loadExportImage(before?: number): Promise<GalleryImage | null> {
+  return transaction("readonly", (tx, done) => {
+    const req = tx.objectStore(STORE).openCursor(before === undefined ? undefined : IDBKeyRange.upperBound(before, true), "prev");
+    req.onsuccess = () => done((req.result?.value as GalleryImage | undefined) ?? null);
+  });
+}
+/** Reload a pending export entry after releasing a failed archive buffer. */
+export function getExportImage(id: number): Promise<GalleryImage | null> {
+  return transaction("readonly", (tx, done) => {
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => done((req.result as GalleryImage | undefined) ?? null);
+  });
+}
 export function clearImages(): Promise<void> {
   return transaction("readwrite", (tx, done) => {
     tx.objectStore(STORE).clear();

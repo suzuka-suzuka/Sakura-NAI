@@ -2,8 +2,11 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { DEFAULT_SETTINGS } from "../lib/nai/types";
-import { saveImages, loadImages, getGalleryReport, deleteImage, clearImages, type GalleryImage } from "../lib/db/gallery";
+import { saveImages, loadImages, loadExportImage, getGalleryReport, deleteImage, clearImages, type GalleryImage } from "../lib/db/gallery";
 import { useStore } from "../lib/store";
+import { writeGalleryParts } from "../lib/gallery-export";
+import { ZipWriter } from "@zip.js/zip.js";
+import JSZip from "jszip";
 
 beforeEach(() => {
   Object.defineProperty(globalThis, "indexedDB", { value: new IDBFactory(), configurable: true });
@@ -14,6 +17,41 @@ const picture = (batchId: number, batchIndex = 0, batchSize = 1): GalleryImage =
 async function seed(count: number) {
   return saveImages(Array.from({ length: count }, (_, i) => picture(i)));
 }
+
+test("export reads single records even within one batch and does not include later inserts", async () => {
+  await saveImages(Array.from({ length: 5 }, (_, index) => picture(1, index, 5)));
+  const newest = await loadExportImage();
+  assert.equal(newest?.batchIndex, 4);
+  await saveImages([picture(2)]);
+  let before = newest!.id;
+  const indices: number[] = [];
+  for (let image = await loadExportImage(before); image; image = await loadExportImage(before)) {
+    indices.push(image.batchIndex);
+    before = image.id;
+  }
+  assert.deepEqual(indices, [3, 2, 1, 0]);
+});
+
+test("adaptive export reloads persisted entries by ID after a failed archive", async t => {
+  const saved = await saveImages([picture(1), picture(2)]);
+  const original = ZipWriter.prototype.close;
+  let attempts = 0;
+  t.mock.method(ZipWriter.prototype, "close", async function(this: ZipWriter<Blob>, ...args: Parameters<typeof original>) {
+    if (++attempts === 1) throw new RangeError("Array buffer allocation failed");
+    return original.apply(this, args);
+  });
+  async function* entries() { yield* saved.images; }
+  const names: string[] = [];
+  await writeGalleryParts(entries(), {
+    signal: new AbortController().signal, onProgress() {}, partBytes: 4096, minPartBytes: 2048,
+    onPart: async blob => {
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer(), { checkCRC32: true });
+      for (const entry of Object.values(zip.files)) { names.push(entry.name); assert.equal(await entry.async("string"), "a"); }
+    },
+  });
+  assert.equal(attempts, 3);
+  assert.deepEqual(names, ["1-0.png", "2-0.png"]);
+});
 
 test("history beyond the former limit remains stored and only explicit deletion removes images", async () => {
   assert.equal((await seed(250)).report.count, 250);

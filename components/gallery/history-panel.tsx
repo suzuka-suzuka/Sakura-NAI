@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Download, Lock, LockOpen, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { loadImages } from "@/lib/db/gallery";
+import { abortReason, throwIfAborted } from "@/lib/nai/abort";
 import { useStore } from "@/lib/store";
 import { translateUI as t, useLocale } from "@/lib/i18n";
 import { IconButton } from "@/components/ui/icon-button";
@@ -17,6 +17,10 @@ export function HistoryPanel() {
   const selectBatch = useStore(s => s.selectBatch), selectImage = useStore(s => s.selectImage), setUI = useStore(s => s.setUI);
   const remove = useStore(s => s.deleteImage), clear = useStore(s => s.clearGallery), load = useStore(s => s.loadGallery);
   const [locked, setLocked] = useState(false), [confirm, setConfirm] = useState(false), [downloading, setDownloading] = useState(false);
+  const [exportCount, setExportCount] = useState(0);
+  const [exportPart, setExportPart] = useState<{ url: string; filename: string; resume: () => void } | null>(null);
+  const exportController = useRef<AbortController | null>(null);
+  useEffect(() => () => exportController.current?.abort(), []);
   const count = useStore(s => s.galleryCount);
   const next = useStore(s => s.galleryNext), loadingMore = useStore(s => s.galleryLoadingMore), loadMore = useStore(s => s.loadMoreGallery);
   const newestId = images[0]?.id;
@@ -36,19 +40,61 @@ export function HistoryPanel() {
     };
   }, []);
   const downloadAll = async () => {
+    if (exportController.current) return;
+    const controller = new AbortController();
+    exportController.current = controller;
     setDownloading(true);
+    setExportCount(0);
+    let sink: WritableStream<Uint8Array> | undefined;
     try {
-      const JSZip = (await import("jszip")).default, zip = new JSZip();
-      for (const image of images.filter(image => (image.id ?? 0) < 0)) zip.file(image.filename, image.dataUrl.split(",")[1], { base64: true });
-      let before: number | undefined;
-      do {
-        const page = await loadImages(before);
-        for (const image of page.images) zip.file(image.filename, image.dataUrl.split(",")[1], { base64: true });
-        before = page.next ?? undefined;
-      } while (before !== undefined);
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = "sakura-history.zip"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) { toast.error(String(e)); } finally { setDownloading(false); }
+      const picker = (window as Window & { showSaveFilePicker?: (options: {
+        suggestedName: string; types: { description: string; accept: Record<string, string[]> }[];
+      }) => Promise<{ createWritable: () => Promise<WritableStream<Uint8Array>> }> }).showSaveFilePicker;
+      // Must run before dynamic imports or database reads consume user activation.
+      if (window.isSecureContext && picker) {
+        const handle = await picker.call(window, { suggestedName: "sakura-history.zip", types: [{ description: "ZIP", accept: { "application/zip": [".zip"] } }] });
+        throwIfAborted(controller.signal);
+        sink = await handle.createWritable();
+      }
+      const { exportImages, writeGalleryZip, writeGalleryParts } = await import("@/lib/gallery-export");
+      throwIfAborted(controller.signal);
+      const source = exportImages(images.filter(image => (image.id ?? 0) < 0));
+      const options = { signal: controller.signal, onProgress: setExportCount };
+      if (sink) {
+        await writeGalleryZip(source, sink, options);
+        toast.success(t("History exported"));
+      } else {
+        await writeGalleryParts(source, { ...options, onPart: async (blob, filename) => {
+          const url = URL.createObjectURL(blob);
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const abort = () => reject(abortReason(controller.signal));
+              throwIfAborted(controller.signal);
+              controller.signal.addEventListener("abort", abort, { once: true });
+              setExportPart({ url, filename, resume: () => {
+                controller.signal.removeEventListener("abort", abort);
+                resolve();
+              } });
+            });
+          } finally {
+            setExportPart(null);
+            // Leave time for the browser to start consuming the download URL.
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }
+        } });
+        toast.success(t("All ZIP part downloads requested"));
+      }
+    } catch (error) {
+      await sink?.abort(error).catch(() => {});
+      if (!controller.signal.aborted && !(error instanceof Error && error.name === "AbortError")) {
+        console.error("History export failed", error);
+        toast.error(t("History export failed: {0}", t(error instanceof Error ? error.message : String(error))));
+      }
+    } finally {
+      exportController.current = null;
+      setDownloading(false);
+      setExportPart(null);
+    }
   };
   return <div className="flex h-full flex-col">
     <button onClick={() => setUI({ galleryOpen: false })} className="flex h-16 shrink-0 items-center justify-between border-b border-border-soft px-4 text-xs font-semibold" aria-label={t("Collapse gallery")}>{t("History")}<ChevronRight className="size-3" /></button>
@@ -67,13 +113,18 @@ export function HistoryPanel() {
       {next !== null && <Button size="sm" disabled={loadingMore} onClick={() => void loadMore()}>{t(loadingMore ? "Loading…" : "Load more history")}</Button>}
     </div>
     <div ref={footer} data-testid="history-footer" className="shrink-0 border-t border-border-soft">
+    {downloading && <div className="flex flex-col gap-2 p-2" role="status">
+      <span className="text-sm text-fg">{t("Exported {0} images", exportCount)}</span>
+      {exportPart && <a className="rounded bg-accent px-3 py-2 text-center text-sm font-semibold text-on-accent" href={exportPart.url} download={exportPart.filename} onClick={() => exportPart.resume()}>{t("Save {0} and continue", exportPart.filename)}</a>}
+      <Button size="sm" variant="secondary" onClick={() => exportController.current?.abort()}>{t("Cancel")}</Button>
+    </div>}
     <p className="px-2 pt-2 text-center text-[10px] text-muted">{t("{0} images in local history", count)}</p>
     <div className="flex justify-center p-1">
       <IconButton size="sm" label={t("Lock history scrolling")} aria-pressed={locked} onClick={() => setLocked(!locked)}>{locked ? <Lock /> : <LockOpen />}</IconButton>
       <IconButton size="sm" label={t("Download all images")} disabled={(!count && !images.length) || downloading} onClick={() => void downloadAll()}><Download /></IconButton>
-      <IconButton size="sm" label={t("Delete selected image")} disabled={!selected} onClick={() => selected?.id && void remove(selected.id)}><Trash2 /></IconButton>
+      <IconButton size="sm" label={t("Delete selected image")} disabled={!selected || downloading} onClick={() => selected?.id && void remove(selected.id)}><Trash2 /></IconButton>
     </div>
-    {count > 0 && <button className="block w-full pb-2 text-[10px] text-muted" onClick={() => setConfirm(true)}>{t("Clear all")}</button>}
+    {count > 0 && <button disabled={downloading} className="block w-full pb-2 text-[10px] text-muted disabled:opacity-50" onClick={() => setConfirm(true)}>{t("Clear all")}</button>}
     </div>
     <Modal open={confirm} onClose={() => setConfirm(false)} title={t("Delete all images?")} description={t("This permanently removes all {0} images from local storage. It can't be undone.", count)}><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setConfirm(false)}>{t("Cancel")}</Button><Button variant="destructive" onClick={() => { void clear(); setConfirm(false); }}>{t("Delete all")}</Button></div></Modal>
   </div>;
