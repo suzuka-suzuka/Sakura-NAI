@@ -185,7 +185,8 @@ export function recipeFromNovelAIMetadata(
   const rawNegative = pick(bag, "uc", "negativePrompt", "negative_prompt");
   const negativePrompt = text(rawNegative)
     ?? text(v4NegativeCaption?.base_caption);
-  if (negativePrompt || rawNegative === "") {
+  const hasNegativePrompt = typeof rawNegative === "string" || typeof v4NegativeCaption?.base_caption === "string";
+  if (hasNegativePrompt) {
     settings.negativePrompt = negativePrompt?.toLowerCase() === "none" ? "" : negativePrompt ?? "";
     imported.add("undesired content");
   }
@@ -290,7 +291,7 @@ export function recipeFromNovelAIMetadata(
   if (autoText !== null) settings.autoText = autoText;
   // PNG captions already contain expanded quality/UC text. Avoid appending them again.
   if (quality === null && qualityPreset === null && prompt) settings.qualityToggle = false;
-  if (ucPreset === null && negativePrompt) settings.ucPreset = 3;
+  if (ucPreset === null && hasNegativePrompt) settings.ucPreset = 3;
   const characters = readCharacters(bag);
   if (characters.length || Array.isArray(pick(bag, "characterPrompts", "character_prompts")) || Array.isArray(v4PromptCaption?.char_captions)) {
     settings.characters = characters;

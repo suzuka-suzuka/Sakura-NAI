@@ -78,6 +78,39 @@ test("an image without metadata cannot import parameters but can become a base",
   assert.equal(useStore.getState().settings.imageSource?.mode, "img2img");
 });
 
+test("importing empty negative captions clears the draft and disables the negative preset", async t => {
+  decodeImages(t);
+  for (const caption of ["", " \n\t", "None"]) {
+    for (const negative of [
+      { uc: caption }, { negativePrompt: caption }, { negative_prompt: caption },
+      { v4_negative_prompt: { caption: { base_caption: caption, char_captions: [] } } },
+    ]) {
+      useStore.getState().patchSettings({ negativePrompt: "current negative", ucPreset: 0 });
+      await prepareImageImport(png(JSON.stringify({ prompt: "saved prompt", ...negative })));
+      assert.ok(useStore.getState().imageImport?.recipe?.importedFields.includes("undesired content"));
+      assert.equal(applyImageImport("recipe"), true);
+      assert.equal(useStore.getState().settings.negativePrompt, "");
+      assert.equal(useStore.getState().settings.ucPreset, 3);
+    }
+  }
+});
+
+test("empty negative captions preserve explicit presets and respect the import selection", () => {
+  const parse = (extra: Record<string, unknown>) => recipeFromNovelAIMetadata([
+    { keyword: "Comment", text: JSON.stringify({ prompt: "saved prompt", ...extra }) },
+  ], { width: 64, height: 64 });
+  for (const ucPreset of [0, 1, 2, 3, 4]) {
+    assert.equal(parse({ uc: "", ucPreset }).settings.ucPreset, ucPreset);
+  }
+  const missing = parse({});
+  assert.equal(missing.settings.ucPreset, DEFAULT_SETTINGS.ucPreset);
+  assert.equal(missing.importedFields.includes("undesired content"), false);
+  const current = useStore.getState().settings;
+  const selected = selectedRecipeSettings(current, parse({ uc: "" }), { ...DEFAULT_RECIPE_IMPORT, negativePrompt: false });
+  assert.equal(selected.negativePrompt, current.negativePrompt);
+  assert.equal(selected.ucPreset, current.ucPreset);
+});
+
 test("a metadata-bearing image used as a base preserves current prompts, model, and sampling settings", async t => {
   decodeImages(t);
   useStore.getState().patchSettings({ width: 832, height: 1216, steps: 30, seed: 15, vibe: [ref] });
