@@ -82,6 +82,6 @@ V5 Full 增加 High（通常）/ Medium（节约）选择，Curated 不提供此
 
 Anlas 公式只在步数项乘 `1 / 1.06521739` 后做基础取整，再应用原 V5 1.5 系数、强度和免费资格；与 sakura-nai-relay 保持一致。例如 832×1216 单张普通账户，High 23 步 26 Anlas，Medium 14 步 17 Anlas。官方公告约 42% 是指定基准的描述，不作为统一折扣。
 
-中转的下游本地免费体力仍每请求扣一份；Medium 节省的是官方上游额度及依公式计算的 Anlas，不改变中转本地张数规则。
+Sakura Relay 的本地体力每次最多抵扣一张图片。Medium 扣 0.5 张体力，V5 Full High 和 V5 Curated 扣 1 张。网页读取 `relay.stamina.availableImagesExact` 按所选模型预估费用。直连 NovelAI 和旧版中转沿用订阅的体力状态。
 
 来源：[官方 Effort 文档](https://docs.novelai.net/en/image/effort/)、[2026-10-08 公告](https://journal.novelai.net/novelai-diffusion-v5-full-effort-toggle/) 及 novelai.net/image 当日公开脚本。

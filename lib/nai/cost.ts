@@ -4,12 +4,23 @@ import { Model } from "./protocol";
 import type { GenerationSettings } from "./types";
 import { imageToolOutputSize } from "./image-tools";
 
-export type AccountInfo = { tier: number; active: boolean; expiresAt?: number; accountType?: number; anlas: number | null; usage: { percent: number; isNegative: boolean } | null };
+export type AccountInfo = {
+  tier: number;
+  active: boolean;
+  expiresAt?: number;
+  accountType?: number;
+  anlas: number | null;
+  usage: { percent: number; isNegative: boolean } | null;
+  relayStaminaImages?: number;
+};
 export function parseAccount(value: unknown): AccountInfo {
   const v = value as Record<string, unknown> | null;
   if (!v || typeof v.tier !== "number" || typeof v.active !== "boolean") throw new Error("Invalid subscription response");
   const credits = v.trainingStepsLeft as Record<string, unknown> | undefined;
   const usage = v.usage as Record<string, unknown> | undefined;
+  const relay = v.relay as Record<string, unknown> | undefined;
+  const stamina = relay?.stamina as Record<string, unknown> | undefined;
+  const relayStaminaImages = stamina?.availableImagesExact;
   return {
     tier: v.tier, active: v.active,
     expiresAt: typeof v.expiresAt === "number" && Number.isFinite(v.expiresAt) ? v.expiresAt : undefined,
@@ -17,6 +28,8 @@ export function parseAccount(value: unknown): AccountInfo {
     anlas: typeof credits?.fixedTrainingStepsLeft === "number" && typeof credits?.purchasedTrainingSteps === "number" ? credits.fixedTrainingStepsLeft + credits.purchasedTrainingSteps : null,
     usage: typeof usage?.percent === "number" && typeof usage.isNegative === "boolean"
       ? { percent: Math.max(0, Math.min(100, usage.percent)), isNegative: usage.isNegative } : null,
+    ...(typeof relayStaminaImages === "number" && Number.isFinite(relayStaminaImages) && relayStaminaImages >= 0
+      ? { relayStaminaImages } : {}),
   };
 }
 
@@ -41,23 +54,27 @@ export function augmentCost(width: number, height: number, backgroundRemoval: bo
 /** Mirrors Aaalice_NAI_Launcher's modern Anlas calculation; see THIRD_PARTY_NOTICES.md.
  * The V5 multiplier is applied AFTER rounding the area/step base, then rounded once more.
  * Opus waives one image's base charge per eligible request, never the entire batch.
- * V5 uses isNegative (not the rounded display percentage) to determine exhausted allowance.
+ * Relay accounts use exact stamina. Other V5 accounts use the subscription allowance flag.
  * Unknown accounts never display a free price. Final billing remains server-controlled.
  */
 export function estimateCost(s: GenerationSettings, account: AccountInfo | null, uncachedVibes = 0): CostEstimate {
   s = effectiveEffortSettings(s);
   const v5 = isV5Model(s.model);
+  const medium = isMediumModel(s.model);
   const active = !!account && ([1, 2, 3, 4].includes(account.accountType ?? 0) ||
     (account.expiresAt !== undefined ? account.expiresAt > Date.now() / 1000 : account.active));
   const opus = active && account?.tier === 3;
-  const allowance = !v5 || !!(account?.usage && !account.usage.isNegative);
+  const relayStaminaImages = account?.relayStaminaImages;
+  const allowance = !v5 || (relayStaminaImages !== undefined
+    ? relayStaminaImages >= (medium ? 0.5 : 1)
+    : account?.usage?.isNegative === false);
   // Focused inpainting bills the requested detail canvas, while the displayed result is the source size.
   const billed = s.imageSource?.mode === "infill" && s.imageSource.focused ? s : imageToolOutputSize(s);
   const area = billed.width * billed.height;
   const free = opus && allowance && area <= 1048576 && s.steps <= 28;
   const smea = !s.imageSource && !v5 && !isV4Model(s.model) && s.autoSmea;
   const strength = s.imageSource ? s.imageSource.mode === "infill" ? s.imageSource.inpaintStrength : s.imageSource.strength : 1;
-  const perImage = Math.max(2, Math.ceil(Math.ceil(2.951823174884865e-6 * area + 5.753298233447344e-7 * area * s.steps * (isMediumModel(s.model) ? 1 / 1.06521739 : 1)) * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));
+  const perImage = Math.max(2, Math.ceil(Math.ceil(2.951823174884865e-6 * area + 5.753298233447344e-7 * area * s.steps * (medium ? 1 / 1.06521739 : 1)) * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));
   const base = perImage * Math.max(0, s.nSamples - (free ? 1 : 0));
   const refsAllowed = !v5 && s.imageSource?.mode !== "infill";
   const director = refsAllowed && (s.model === Model.V4_5 || s.model === Model.V4_5_CUR) ? s.directorReference.length : 0;

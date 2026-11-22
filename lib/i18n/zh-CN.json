@@ -426,7 +426,7 @@
   "When off, keep the previous image until the new batch is complete.": "关闭后，生成期间保留上一张图，完成后再显示新图。",
   "Confirm paid generation": "付费生成提醒",
   "Ask once when switching from 0 points to a paid generation.": "从 0 点切换到需要点数时，首次生成前弹窗提醒。",
-  "Estimated Anlas cost for the whole batch. Final billing is determined by NovelAI.": "当前整批图片的预计 Anlas 消耗，以 NovelAI 实际扣费为准。",
+  "Estimated Anlas cost for the whole batch. The connected service determines the final charge.": "当前整批图片的预计 Anlas 消耗，以所连接服务的实际扣费为准。",
   "Subscription status unavailable; showing the estimate without a free allowance.": "暂未获取订阅状态，显示不含免费额度的预计点数。",
   "Checking cost…": "查询点数…",
   "0 points": "0 点",

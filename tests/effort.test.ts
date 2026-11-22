@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "../lib/nai/types";
-import { V5_FULL, V5_FULL_MEDIUM, isV5Model, supportsStreaming } from "../lib/nai/models";
+import { V5_CURATED, V5_FULL, V5_FULL_MEDIUM, isV5Model, supportsStreaming } from "../lib/nai/models";
 import { buildPayload } from "../lib/nai/payload";
-import { estimateCost } from "../lib/nai/cost";
+import { estimateCost, parseAccount } from "../lib/nai/cost";
 import { effectiveEffortSettings } from "../lib/nai/effort";
 import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
 import { Sampler } from "../lib/nai/protocol";
@@ -37,6 +37,39 @@ test("Medium quote matches relay for standard, large and batched Opus generation
   assert.equal(estimateCost(settings,opus).total,0);
   assert.equal(estimateCost({...settings,nSamples:2},opus).total,17);
   assert.equal(estimateCost(settings,{...opus,usage:{percent:0,isNegative:true}}).total,17);
+});
+
+test("Relay quotes Medium and regular V5 from exact stamina, with legacy allowance fallback", () => {
+  const subscription = { tier: 3, active: true, usage: { percent: 0, isNegative: true } };
+  const quoteAccount = (availableImagesExact: unknown) => parseAccount({
+    ...subscription,
+    relay: { stamina: { availableImagesExact, capacityImages: 280 } },
+  });
+
+  const half = quoteAccount(0.5);
+  assert.equal(half.relayStaminaImages, 0.5);
+  assert.equal(estimateCost(settings, half).total, 0);
+  assert.equal(estimateCost({ ...settings, nSamples: 2 }, half).total, 17);
+  assert.equal(estimateCost({ ...settings, width: 1536, height: 1536 }, half).total, 38);
+  for (const model of [V5_FULL, V5_CURATED] as const) {
+    const regular = { ...settings, model, steps: 23 };
+    assert.equal(estimateCost(regular, half).total, 26);
+    assert.equal(estimateCost(regular, quoteAccount(1)).total, 0);
+  }
+  for (const belowHalf of [0.49, 0]) {
+    assert.equal(estimateCost(settings, quoteAccount(belowHalf)).total, 17);
+  }
+  assert.equal(estimateCost(settings, { ...half, tier: 1 }).total, 17);
+
+  const legacy = parseAccount({ ...subscription, usage: { percent: 0, isNegative: false },
+    relay: { stamina: { availableImages: 1 } } });
+  assert.equal(legacy.relayStaminaImages, undefined);
+  assert.equal(estimateCost(settings, legacy).total, 0);
+  for (const invalid of ["0.5", -1, Infinity]) {
+    const account = quoteAccount(invalid);
+    assert.equal(account.relayStaminaImages, undefined);
+    assert.equal(estimateCost(settings, account).total, 17);
+  }
 });
 
 test("Medium inpainting keeps its model and fixed settings", () => {

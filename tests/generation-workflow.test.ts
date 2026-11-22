@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useStore } from "../lib/store";
 import { NaiClient, loadUIPrefs } from "../lib/nai/client";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "../lib/nai/types";
-import { V5_FULL, V5_CURATED } from "../lib/nai/models";
+import { V5_FULL, V5_CURATED, V5_FULL_MEDIUM } from "../lib/nai/models";
 import { EventType, Image, Model } from "../lib/nai/protocol";
 import { estimateCost, parseAccount, type AccountInfo } from "../lib/nai/cost";
 import { qualityText, negativeText, NEGATIVE_PRESETS, QUALITY_PRESETS } from "../lib/nai/presets";
@@ -318,6 +318,21 @@ test("exhausted V5 allowance is repriced and blocked when the refreshed points c
   assert.equal(generate.mock.callCount(), 0);
   assert.equal(useStore.getState().pendingPayment, null);
 });
+test("Medium with half a Relay stamina image can generate with zero points", async t => {
+  const { client, generate } = setup(t, { model: V5_FULL_MEDIUM });
+  const account = parseAccount({
+    tier: 3, active: true,
+    trainingStepsLeft: { fixedTrainingStepsLeft: 0, purchasedTrainingSteps: 0 },
+    usage: { percent: 0, isNegative: true },
+    relay: { stamina: { availableImagesExact: 0.5, capacityImages: 280 } },
+  });
+  t.mock.method(client, "account", async () => account);
+  await useStore.getState().generate();
+  assert.equal(generate.mock.callCount(), 1);
+  assert.equal(useStore.getState().pendingPayment, null);
+  assert.equal(useStore.getState().paidAcknowledged, false);
+});
+
 test("a batch with reference encoding checks the entire cost before any paid API call", async t => {
   const requests: string[] = [];
   t.mock.method(globalThis, "fetch", async (url: string | URL | Request) => {
