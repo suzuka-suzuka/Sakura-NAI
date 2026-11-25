@@ -32,8 +32,9 @@ export type ImageSource = {
 };
 
 export type ReferenceImage = {
-  /** Precise-reference target; omitted by older sessions (character only). */
-  referenceType?: "character" | "style" | "character&style";
+  /** Missing types in saved sessions default to character & style. */
+  referenceType?: "character" | "style" | "character&style" | "costume";
+  preferSameOutfit?: boolean;
   /** base64 (no data-url prefix) as returned by parseImage */
   base64: string;
   /** small data-url for previewing in the form */

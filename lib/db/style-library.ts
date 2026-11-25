@@ -29,6 +29,6 @@ export async function saveStyleLibrary(presets: StylePreset[]): Promise<void> {
 }
 export async function loadReferenceSession(): Promise<ReferenceSession | null> {
   const value = await access<ReferenceSession>("references");
-  return value ? { vibe: validateStoredReferences(value.vibe), directorReference: validateStoredReferences(value.directorReference) } : null;
+  return value ? { vibe: validateStoredReferences(value.vibe), directorReference: validateStoredReferences(value.directorReference, "directorReference") } : null;
 }
 export async function saveReferenceSession(value: ReferenceSession): Promise<void> { await access("references", value); }

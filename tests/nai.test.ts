@@ -6,10 +6,10 @@ import { gzipSync, zlibSync } from "fflate";
 import { buildPayload } from "../lib/nai/payload";
 import { v5Prompt } from "../lib/nai/v5";
 import { DEFAULT_SETTINGS, type GenerationSettings } from "../lib/nai/types";
-import { V5_FULL, V5_CURATED } from "../lib/nai/models";
+import { V5_FULL, V5_CURATED, V5_FULL_MEDIUM } from "../lib/nai/models";
 import { Model, Sampler, Image, EventType } from "../lib/nai/protocol";
 import { decodeStream, decodeImages, NaiTransport } from "../lib/nai/transport";
-import { extractImageMetadata } from "../lib/nai/media";
+import { extractImageMetadata, prepareDirectorReference } from "../lib/nai/media";
 import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
 import { NaiClient } from "../lib/nai/client";
 import { validateStoredReferences } from "../lib/style-presets";
@@ -158,6 +158,46 @@ test("precise reference modes survive storage and reach the request in image ord
     assert.deepEqual(p.director_reference_information_extracted, [1, 1, 1, 1]);
     assert.equal(p.reference_image_multiple, undefined);
   }
+
+  const outfit = { ...references[0], referenceType: "costume", strength: 5 };
+  const v5Refs = validateStoredReferences([
+    outfit, ...references,
+    { ...references[0], preferSameOutfit: true, strength: 3.5 },
+    { ...references[2], preferSameOutfit: false },
+  ], "directorReference");
+  assert.throws(() => validateStoredReferences([outfit], "vibe"));
+  assert.throws(() => validateStoredReferences([{ ...outfit, strength: 5.1 }], "directorReference"));
+  for (const model of [V5_FULL, V5_CURATED, V5_FULL_MEDIUM] as const) {
+    await collect((await new NaiClient(conn).generate(settings({ model, directorReference: v5Refs, vibe: references }))).events);
+    const p = bodies.at(-1)!;
+    assert.deepEqual(p.director_reference_descriptions, ["costume", "character", "style", "character&style", "character&style", "character_mainoutfit", "character&style_anyoutfit"]
+      .map(base_caption => ({ caption: { base_caption, char_captions: [] }, legacy_uc: false })));
+    assert.deepEqual(p.director_reference_strength_values, [5, 0.25, 0.5, 0.75, 1, 3.5, 0.75]);
+    assert.deepEqual(p.director_reference_secondary_strength_values, Array(7).fill(0));
+    assert.equal((p.director_reference_images as string[]).length, 7);
+    assert.equal(p.reference_image_multiple, undefined);
+  }
+  await collect((await new NaiClient(conn).generate(settings({ model: Model.V4_5, directorReference: v5Refs }))).events);
+  assert.deepEqual(bodies.at(-1)!.director_reference_strength_values, [0.25, 0.5, 0.75, 1, 1, 0.75]);
+  assert.equal(v5Refs[5].strength, 3.5);
+});
+
+test("V5 reference preprocessing preserves bucket-sized originals and center crops other aspect ratios", async t => {
+  let size = { width: 832, height: 1216 };
+  t.mock.method(globalThis, "fetch", () => { throw new Error("Unexpected request"); });
+  const draw: number[][] = [];
+  const canvas = { width: 0, height: 0, getContext: () => ({ drawImage(_image: unknown, ...args: number[]) { draw.push(args); } }), toDataURL: () => "data:image/png;base64,processed" };
+  const globals = globalThis as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries({ document: { createElement: () => canvas }, createImageBitmap: async () => ({ ...size, close() {} }) })) {
+    const previous = globals[key];
+    globals[key] = value;
+    t.after(() => { if (previous === undefined) delete globals[key]; else globals[key] = previous; });
+  }
+  assert.equal(await prepareDirectorReference("YWJj", true), "YWJj");
+  assert.equal(draw.length, 0);
+  size = { width: 600, height: 580 };
+  assert.equal(await prepareDirectorReference("YWJj", true), "processed");
+  assert.deepEqual(draw[0].map(n => n || 0), [-17, 0, 1059, 1024]);
 });
 
 test("client V5 never encodes dormant references; cancel aborts request and releases reader", async (t) => {

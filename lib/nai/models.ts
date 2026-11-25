@@ -40,6 +40,8 @@ export const V4_MODELS = new Set<Model>([
 export const isV4Model = (m: GenerationModel) => V4_MODELS.has(m as Model);
 export const supportsCharacters = (m: GenerationModel) => isV4Model(m) || isV5Model(m);
 export const supportsStreaming = supportsCharacters;
+export const supportsPreciseReference = (model: GenerationModel) =>
+  isV5Model(model) || model === Model.V4_5 || model === Model.V4_5_CUR;
 export const maxCharacters = (m: GenerationModel) => isV5Model(m) ? 22 : isV4Model(m) ? 6 : 0;
 
 /** Imported/processed images may be larger than the model canvas or not divisible by 64. */

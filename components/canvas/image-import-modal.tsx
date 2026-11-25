@@ -25,10 +25,11 @@ export function ImageImportModal() {
 
 function ImportContent({ image, busy, close }: { image: ImageImportCandidate; busy: boolean; close: () => void }) {
   const [options, setOptions] = useState({ ...DEFAULT_RECIPE_IMPORT });
+  const inpainting = useStore(s => s.settings.imageSource?.mode === "infill");
   const choices: { purpose: ImageImportPurpose; title: string; icon: typeof Palette; disabled?: boolean }[] = [
     { purpose: "img2img", title: t("Use as Image2Image base"), icon: ImagePlus },
     { purpose: "vibe", title: t("Use for Vibe Transfer"), icon: Palette },
-    { purpose: "directorReference", title: t("Use as character reference"), icon: UserRound },
+    { purpose: "directorReference", title: t("Use as precise reference"), icon: UserRound, disabled: inpainting },
   ];
 
   return <>

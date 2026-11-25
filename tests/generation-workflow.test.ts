@@ -216,12 +216,24 @@ test("cancelled renewal retains paid-through Opus benefits; expired subscription
   assert.equal(estimateCost(settings(), cancelled).total, 0);
   assert.equal(estimateCost(settings(), { ...cancelled, active: true, expiresAt: expiresAt - 7200 }).total, 30);
 });
-test("Vibe request surcharges and encoding are not multiplied by the number of images", () => {
+test("Vibe surcharges apply per output image and encoding applies once", () => {
   const ref = { base64: "fixture", preview: "fixture", strength: 0.5, informationExtracted: 1 };
   const cost = estimateCost(settings({ model: Model.V4_5, nSamples: 2, vibe: Array(6).fill(ref) }), opus, 2);
-  assert.equal(cost.references, 4);
+  assert.equal(cost.references, 8);
   assert.equal(cost.encoding, 4);
-  assert.equal(cost.total, 28);
+  assert.equal(cost.total, 32);
+});
+test("precise reference pricing follows active images for each output, including the Opus sample", () => {
+  const ref = { base64: "fixture", preview: "", strength: 5, informationExtracted: 1 };
+  const refs = [ref, { ...ref, referenceType: "costume" as const }];
+  for (const model of [V5_FULL, V5_CURATED, Model.V4_5, Model.V4] as const) {
+    const s = settings({ model, nSamples: 2, directorReference: refs });
+    const cost = estimateCost(s, opus);
+    assert.equal(cost.references, model === Model.V4 ? 0 : model === Model.V4_5 ? 10 : 20);
+    assert.equal(cost.total, estimateCost({ ...s, directorReference: [] }, opus).total + cost.references);
+    const imageSource = { mode: "infill" as const, width: 832, height: 1216, dataUrl: "", strength: 1, inpaintStrength: 1, noise: 0 };
+    assert.equal(estimateCost({ ...s, imageSource }, opus).references, 0);
+  }
 });
 test("legacy character-tab preference migrates to the combined prompt panel", t => {
   const old = Object.getOwnPropertyDescriptor(globalThis, "localStorage");

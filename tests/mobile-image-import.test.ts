@@ -90,6 +90,19 @@ function browser(t: TestContext) {
 }
 beforeEach(() => useStore.setState(useStore.getInitialState(), true));
 
+test("dropping a precise reference keeps the selected V5 model", async t => {
+  browser(t);
+  const file = new File([png()], "outfit.png", { type: "image/png" });
+  useStore.setState({ showConnect: false });
+  useStore.getState().patchSettings({ model: "nai-diffusion-5-curated" });
+  assert.equal(await prepareImageImport(file), true);
+  assert.equal(applyImageImport("directorReference"), true);
+  const s = useStore.getState().settings;
+  assert.equal(s.model, "nai-diffusion-5-curated");
+  assert.equal(s.directorReference[0].strength, 1);
+  assert.equal(s.directorReference[0].name, file.name);
+});
+
 test("WebP/JPEG/PNG EXIF restores parameters across TIFF byte orders, prefixes and Chinese encodings", async t => {
   browser(t);
   for (const type of ["webp", "jpeg", "png"] as const) for (const little of [true, false]) for (const unicode of [true, false]) {

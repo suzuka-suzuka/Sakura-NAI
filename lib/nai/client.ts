@@ -1,5 +1,6 @@
-import { Host, Model, EventType, EmotionOptions, bytesToBase64, base64ToBytes, Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
+import { Host, EventType, EmotionOptions, bytesToBase64, base64ToBytes, Image, type ImageInput, type MsgpackEvent, type TagSuggestion } from "./protocol";
 import { parseImage, prepareDirectorReference } from "./media";
+import { activePreciseReferences, preciseReferenceCaption } from "./precise-reference";
 import { NaiTransport } from "./transport";
 import { throwIfAborted } from "./abort";
 import { queryAccount } from "./account";
@@ -144,7 +145,7 @@ export class NaiClient {
     return queryAccount(this.connection);
   }
   uncachedVibes(s: GenerationSettings) {
-    if (s.imageSource?.mode === "infill" || isV5Model(s.model) || !isV4Model(s.model) || (s.model.includes("4-5") && s.directorReference.length)) return 0;
+    if (s.imageSource?.mode === "infill" || !isV4Model(s.model) || activePreciseReferences(s).length) return 0;
     return new Set(s.vibe.filter(r => !vibeEncoding(r, s.model)).map(r => JSON.stringify([s.model, r.informationExtracted, r.base64])).filter(key => !this.vibes.has(key))).size;
   }
   async generate(settings: GenerationSettings, preview = true): Promise<GenerateHandle> {
@@ -186,16 +187,17 @@ export class NaiClient {
   }
 
   private async addReferences(s: GenerationSettings, p: Record<string, unknown>, signal?: AbortSignal) {
-    if (isV5Model(s.model) || s.imageSource?.mode === "infill") return;
-    const director = (s.model === Model.V4_5 || s.model === Model.V4_5_CUR) && s.directorReference.length > 0;
-    if (director) {
-      p.director_reference_images = await Promise.all(s.directorReference.map(r => prepareDirectorReference(r.base64)));
-      p.director_reference_descriptions = s.directorReference.map(r => ({ caption: { base_caption: r.referenceType ?? "character&style", char_captions: [] }, legacy_uc: false }));
-      p.director_reference_strength_values = s.directorReference.map(r => r.strength);
+    if (s.imageSource?.mode === "infill") return;
+    const v5 = isV5Model(s.model);
+    const refs = activePreciseReferences(s);
+    if (refs.length) {
+      p.director_reference_images = await Promise.all(refs.map(r => prepareDirectorReference(r.base64, v5)));
+      p.director_reference_descriptions = refs.map(r => ({ caption: { base_caption: preciseReferenceCaption(r, v5), char_captions: [] }, legacy_uc: false }));
+      p.director_reference_strength_values = refs.map(r => Math.min(r.strength, v5 ? 5 : 1));
       // Official API stores the inverse of the UI fidelity slider.
-      p.director_reference_secondary_strength_values = s.directorReference.map(r => 1 - (r.fidelity ?? 1));
-      p.director_reference_information_extracted = s.directorReference.map(() => 1);
-    } else if (s.vibe.length) {
+      p.director_reference_secondary_strength_values = refs.map(r => v5 ? 0 : 1 - (r.fidelity ?? 1));
+      p.director_reference_information_extracted = refs.map(() => 1);
+    } else if (!v5 && s.vibe.length) {
       if (s.vibe.length > MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
       // Validate all references before an encoding request can consume Anlas.
       if (s.vibe.some(ref => !vibeEncoding(ref, s.model) && !ref.base64)) throw new Error("This Vibe has no encoding for the selected model. Switch to a compatible model or upload its original image.");

@@ -12,6 +12,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Slider } from "@/components/ui/slider";
 import { Select } from "@/components/ui/select";
 import { isV4Model, isV5Model } from "@/lib/nai/models";
+import { prefersSameOutfit } from "@/lib/nai/precise-reference";
 import { Model } from "@/lib/nai/protocol";
 import { isVibeFile, VIBE_FILE_ACCEPT, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
 import { prepareStyleImport } from "@/lib/style-import";
@@ -23,7 +24,7 @@ export function ReferenceUploader({
   emptyLabel,
 }: {
   field: "vibe" | "directorReference";
-  emptyLabel: string;
+  emptyLabel?: string;
 }) {
   useLocale();
   const refs = useStore((s) => s.settings[field]);
@@ -52,11 +53,11 @@ export function ReferenceUploader({
         const { base64, preview } = await parseReference(file);
         const latest = useStore.getState();
         if (latest.isGenerating || latest.isPreparing || latest.isDirectorProcessing || latest.pendingPayment) break;
-        if (latest.settings[field].length >= MAX_VIBES) throw new Error("Use between 1 and 16 Vibe references.");
+        if (latest.settings[field].length >= MAX_VIBES) throw new Error(translateUI("You can add up to {0} reference images.", MAX_VIBES));
         if (vibe && latest.settings.imageSource?.mode === "infill") throw new Error("Vibe Transfer is unavailable during inpainting. Switch to text-to-image or Image2Image first.");
         if (vibe && isV5Model(useStore.getState().settings.model)) patch({ model: Model.V4_5 });
         if (vibe) patch({ directorReference: [] });
-        add(field, { base64, preview, name: file.name, strength: 0.6, informationExtracted: 1.0 });
+        add(field, { base64, preview, name: file.name, strength: !vibe && isV5Model(latest.settings.model) ? 1 : 0.6, informationExtracted: 1.0 });
       } catch (e) {
         toast.error(translateUI(e instanceof Error ? e.message : "Couldn't read {0}", file.name));
       }
@@ -86,10 +87,10 @@ export function ReferenceUploader({
       />
       <Button variant="outline" size="sm" disabled={blocked || reading} className="w-full" onClick={() => inputRef.current?.click()}>
         <Upload className="size-4" /> {translateUI(vibe && v5 ? "Add a Vibe / image (switch to V4.5)" : vibe ? "Add Vibe file / reference image" : "Add reference image")}</Button>
-      {vibe && hasCharacterReferences && <p className="mt-2 text-xs text-muted">{translateUI("Applying Vibes replaces the current character references.")}</p>}
+      {vibe && hasCharacterReferences && <p className="mt-2 text-xs text-muted">{translateUI("Applying Vibes replaces the current precise references.")}</p>}
 
       {refs.length === 0 ? (
-        <p className="mt-2 text-center text-[12px] text-muted">{emptyLabel}</p>
+        <p className="mt-2 text-center text-[12px] text-muted">{emptyLabel ?? translateUI(v5 ? "Guide the character, style, or outfit from a reference." : "Guide character features, art style, or both from a reference.")}</p>
       ) : (
         <div className="mt-3 flex flex-col gap-3">
           {refs.map((r, i) => (
@@ -101,7 +102,7 @@ export function ReferenceUploader({
                 className="size-16 shrink-0 rounded-[8px] object-cover"
               /> : <span className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-bg"><Palette className="size-7 text-accent" /></span>}
               <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <input aria-label={translateUI("Reference name")} value={r.name ?? ""} placeholder={`Vibe ${i + 1}`} maxLength={200} disabled={blocked} onChange={event => update(field, i, { name: event.target.value })} className="min-w-0 rounded bg-transparent text-xs outline-none focus:ring-1 focus:ring-accent" />
+                <input aria-label={translateUI("Reference name")} value={r.name ?? ""} placeholder={vibe ? `Vibe ${i + 1}` : translateUI("Reference {0}", i + 1)} maxLength={200} disabled={blocked} onChange={event => update(field, i, { name: event.target.value })} className="min-w-0 rounded bg-transparent text-xs outline-none focus:ring-1 focus:ring-accent" />
                 <fieldset disabled={blocked} className="space-y-2">
                 {!vibe && <label className="block space-y-1 text-xs text-muted">{translateUI("Reference type")}
                   <Select className="h-8 py-0 pl-2 pr-8 text-xs" aria-label={translateUI("Reference type")} value={r.referenceType ?? "character&style"}
@@ -109,15 +110,23 @@ export function ReferenceUploader({
                     <option value="character&style">{translateUI("Character & style reference")}</option>
                     <option value="character">{translateUI("Character reference")}</option>
                     <option value="style">{translateUI("Style reference")}</option>
+                    {(v5 || r.referenceType === "costume") && <option value="costume" disabled={!v5}>{translateUI(v5 ? "Outfit reference" : "Outfit reference (V5 only, skipped)")}</option>}
                   </Select>
                 </label>}
-                <Slider label={translateUI("Strength")} min={0} max={1} step={0.01} value={r.strength}
+                {!vibe && v5 && r.referenceType !== "style" && r.referenceType !== "costume" && <label className="flex items-center gap-2 text-xs">
+                  <input type="checkbox" className="accent-accent" checked={prefersSameOutfit(r)}
+                    onChange={event => update(field, i, { preferSameOutfit: event.target.checked })} />
+                  {translateUI("Prefer same outfit")}
+                </label>}
+                <Slider label={translateUI("Strength")} min={0} max={!vibe && v5 ? 5 : 1} step={0.01} value={!vibe && !v5 ? Math.min(1, r.strength) : r.strength}
+                  disabled={!vibe && !v5 && r.referenceType === "costume"}
                   onValueChange={strength => update(field, i, { strength })} format={value => value.toFixed(2)} />
                 {vibe && !r.base64 ? <label className="block text-xs text-muted">{translateUI("Information extracted (saved encodings)")}
                   <Select aria-label={translateUI("Information extracted (saved encodings)")} value={r.informationExtracted} onChange={event => update(field, i, { informationExtracted: Number(event.target.value) })}>
                     {[...new Set((r.encodings ?? []).map(encoding => encoding.informationExtracted))].sort((a,b) => a-b).map(value => <option key={value} value={value}>{value.toFixed(2)}</option>)}
                   </Select>
-                </label> : <Slider
+                </label> : (vibe || !v5) && <Slider
+                  disabled={!vibe && r.referenceType === "costume"}
                   label={translateUI(vibe ? "Info extracted" : "Fidelity")}
                   min={0}
                   max={1}

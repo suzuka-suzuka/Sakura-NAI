@@ -88,7 +88,7 @@ function LibraryContent() {
       <label className="flex items-center gap-2"><input type="radio" name="style-mode" checked={append} onChange={() => setUI({ styleAppend: true })} className="accent-accent" />{t("Append tags / Vibes")}</label>
       <label className="flex items-center gap-2"><input type="radio" name="style-mode" checked={!append} onChange={() => setUI({ styleAppend: false })} className="accent-accent" />{t("Replace tags / Vibes")}</label>
     </fieldset>
-    {settings.directorReference.length > 0 && <p className="text-xs text-muted">{t("Applying Vibes replaces the current character references.")}</p>}
+    {settings.directorReference.length > 0 && <p className="text-xs text-muted">{t("Applying Vibes replaces the current precise references.")}</p>}
     {pending && <section className="space-y-3 rounded-xl border border-accent/40 p-3 sm:p-4" aria-label={t("Import preview")}>
       <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">{t("Import preview")} · {pending.presets.length}</h3><button type="button" className="text-xs text-muted hover:text-fg" disabled={disabled} onClick={() => setUI({ styleImport: null })}>{t("Cancel")}</button></div>
       <div className="max-h-52 space-y-2 overflow-y-auto">
@@ -103,7 +103,7 @@ function LibraryContent() {
     <details className="rounded-xl border border-border-soft p-3" open={settings.vibe.length > 0 || undefined}>
       <summary className="cursor-pointer text-sm font-semibold">{t("Current Vibes")} · {settings.vibe.length}</summary>
       <div className="mt-3 space-y-3">
-        {isV5Model(settings.model) && <p className="text-xs leading-relaxed text-muted">{t("V5 does not support Vibe Transfer. Import a Vibe to choose a compatible model, or switch to V4.5 to add reference images.")}</p>}
+        {isV5Model(settings.model) && <p className="text-xs leading-relaxed text-muted">{t("Import a Vibe to choose a compatible model, or switch to V4.5 to add a Vibe image.")}</p>}
         {isV5Model(settings.model) && settings.vibe.length > 0 && <Button size="sm" variant="secondary" disabled={disabled} onClick={() => {
           try { useStore.getState().restoreSettings(applyStylePreset(settings, createStylePreset(t("Current Vibes"), "vibe", settings), false), { message: t("Applied preset: {0}", t("Current Vibes")) }); }
           catch (error) { report(error); }

@@ -32,11 +32,11 @@ test("Medium overrides the wire settings without destroying saved High settings"
 test("Medium quote matches relay for standard, large and batched Opus generation", () => {
   const standard = {tier:1,active:true,anlas:100,usage:null};
   const opus = {...standard,tier:3,usage:{percent:50,isNegative:false}};
-  assert.equal(estimateCost(settings,standard).total,17);
-  assert.equal(estimateCost({...settings,width:1536,height:1536},standard).total,38);
+  assert.equal(estimateCost(settings,standard).total,15);
+  assert.equal(estimateCost({...settings,width:1536,height:1536},standard).total,33);
   assert.equal(estimateCost(settings,opus).total,0);
-  assert.equal(estimateCost({...settings,nSamples:2},opus).total,17);
-  assert.equal(estimateCost(settings,{...opus,usage:{percent:0,isNegative:true}}).total,17);
+  assert.equal(estimateCost({...settings,nSamples:2},opus).total,15);
+  assert.equal(estimateCost(settings,{...opus,usage:{percent:0,isNegative:true}}).total,15);
 });
 
 test("Relay quotes Medium and regular V5 from exact stamina, with legacy allowance fallback", () => {
@@ -49,17 +49,17 @@ test("Relay quotes Medium and regular V5 from exact stamina, with legacy allowan
   const half = quoteAccount(0.5);
   assert.equal(half.relayStaminaImages, 0.5);
   assert.equal(estimateCost(settings, half).total, 0);
-  assert.equal(estimateCost({ ...settings, nSamples: 2 }, half).total, 17);
-  assert.equal(estimateCost({ ...settings, width: 1536, height: 1536 }, half).total, 38);
+  assert.equal(estimateCost({ ...settings, nSamples: 2 }, half).total, 15);
+  assert.equal(estimateCost({ ...settings, width: 1536, height: 1536 }, half).total, 33);
   for (const model of [V5_FULL, V5_CURATED] as const) {
     const regular = { ...settings, model, steps: 23 };
     assert.equal(estimateCost(regular, half).total, 26);
     assert.equal(estimateCost(regular, quoteAccount(1)).total, 0);
   }
   for (const belowHalf of [0.49, 0]) {
-    assert.equal(estimateCost(settings, quoteAccount(belowHalf)).total, 17);
+    assert.equal(estimateCost(settings, quoteAccount(belowHalf)).total, 15);
   }
-  assert.equal(estimateCost(settings, { ...half, tier: 1 }).total, 17);
+  assert.equal(estimateCost(settings, { ...half, tier: 1 }).total, 15);
 
   const legacy = parseAccount({ ...subscription, usage: { percent: 0, isNegative: false },
     relay: { stamina: { availableImages: 1 } } });
@@ -68,7 +68,7 @@ test("Relay quotes Medium and regular V5 from exact stamina, with legacy allowan
   for (const invalid of ["0.5", -1, Infinity]) {
     const account = quoteAccount(invalid);
     assert.equal(account.relayStaminaImages, undefined);
-    assert.equal(estimateCost(settings, account).total, 17);
+    assert.equal(estimateCost(settings, account).total, 15);
   }
 });
 

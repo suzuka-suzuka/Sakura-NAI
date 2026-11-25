@@ -8,7 +8,7 @@ import { isMediumModel, V5_FULL, V5_FULL_MEDIUM } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import { translateUI as t, useLocale } from "@/lib/i18n";
-import { MODEL_OPTIONS, modelLabel, isV5Model, isV4Model, SIZE_TIERS, presetDims, tierAspectForSize, maxSamples } from "@/lib/nai/models";
+import { MODEL_OPTIONS, modelLabel, supportsPreciseReference, isV5Model, isV4Model, SIZE_TIERS, presetDims, tierAspectForSize, maxSamples } from "@/lib/nai/models";
 import { QUALITY_PRESETS, NEGATIVE_PRESETS, qualityPreset, type NegativePreset, type QualityPreset } from "@/lib/nai/presets";
 import { prepareImageImport } from "@/lib/recipe-import";
 import { IMAGE_FILE_ACCEPT } from "@/lib/image-picker";
@@ -142,7 +142,7 @@ export function ImageInputPanel() {
       </div>}
     </div>
     {!isV5Model(s.model) ? <details open={s.vibe.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Vibe transfer")}{s.vibe.length > 0 && ` (${s.vibe.length})`}</summary><ReferenceUploader field="vibe" emptyLabel={t("Transfer the vibe of reference images.")} /></details> : s.vibe.length > 0 && <p className="text-xs text-muted">{t("{0} saved Vibe(s). V5 does not use them; open Styles and presets to apply them with a compatible model.", s.vibe.length)}</p>}
-    {s.model.includes("4-5") && <details open={s.directorReference.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Precise reference")}</summary><ReferenceUploader field="directorReference" emptyLabel={t("Guide character features, art style, or both from a reference.")} /></details>}
+    {supportsPreciseReference(s.model) && source?.mode !== "infill" && <details open={s.directorReference.length > 0} className="rounded border border-border-soft p-2.5"><summary className="cursor-pointer text-sm font-semibold">{t("Precise reference")}</summary><ReferenceUploader field="directorReference" /></details>}
   </section>;
 }
 

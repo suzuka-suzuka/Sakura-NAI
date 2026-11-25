@@ -1,6 +1,6 @@
 import { effectiveEffortSettings } from "./effort";
 import { isV4Model, isV5Model, isMediumModel } from "./models";
-import { Model } from "./protocol";
+import { activePreciseReferences } from "./precise-reference";
 import type { GenerationSettings } from "./types";
 import { imageToolOutputSize } from "./image-tools";
 
@@ -74,12 +74,14 @@ export function estimateCost(s: GenerationSettings, account: AccountInfo | null,
   const free = opus && allowance && area <= 1048576 && s.steps <= 28;
   const smea = !s.imageSource && !v5 && !isV4Model(s.model) && s.autoSmea;
   const strength = s.imageSource ? s.imageSource.mode === "infill" ? s.imageSource.inpaintStrength : s.imageSource.strength : 1;
-  const perImage = Math.max(2, Math.ceil(Math.ceil(2.951823174884865e-6 * area + 5.753298233447344e-7 * area * s.steps * (medium ? 1 / 1.06521739 : 1)) * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));
+  const rawBase = 2.951823174884865e-6 * area + 5.753298233447344e-7 * area * (medium ? 23 : s.steps);
+  const modelBase = medium ? rawBase / 1.75 : Math.ceil(rawBase);
+  const perImage = Math.max(2, Math.ceil(modelBase * (smea ? 1.2 : 1) * (v5 ? 1.5 : 1) * strength));
   const base = perImage * Math.max(0, s.nSamples - (free ? 1 : 0));
-  const refsAllowed = !v5 && s.imageSource?.mode !== "infill";
-  const director = refsAllowed && (s.model === Model.V4_5 || s.model === Model.V4_5_CUR) ? s.directorReference.length : 0;
-  const references = !refsAllowed ? 0 : director ? director * 5 * s.nSamples : isV4Model(s.model) ? Math.max(0, s.vibe.length - 4) * 2 : 0;
-  const encoding = refsAllowed && !director && isV4Model(s.model) ? uncachedVibes * 2 : 0;
+  const director = activePreciseReferences(s).length;
+  const useVibes = !director && isV4Model(s.model) && s.imageSource?.mode !== "infill";
+  const references = (director * 5 + (useVibes ? Math.max(0, s.vibe.length - 4) * 2 : 0)) * s.nSamples;
+  const encoding = useVibes ? uncachedVibes * 2 : 0;
   return { total: base + references + encoding, base, references, encoding, usesAllowance: !!(free && v5), accountKnown: !!account, valid: perImage <= 140 };
 }
 

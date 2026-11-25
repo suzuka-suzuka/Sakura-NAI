@@ -8,12 +8,15 @@ const modelSchema = z.enum(MODEL_OPTIONS.map(option => option.value));
 const unit = z.number().min(0).max(1);
 const image = z.string().max(64 * 1024 * 1024).refine(value => !value || /^[A-Za-z0-9+/]+={0,2}$/.test(value), "Invalid embedded image.");
 const preview = z.string().max(64 * 1024 * 1024).refine(value => !value || /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(value), "Invalid embedded preview.");
-const referenceSchema = z.object({
-    fidelity: unit.optional(),
-  referenceType: z.enum(["character", "style", "character&style"]).optional(),
+const referenceFields = {
+  fidelity: unit.optional(),
+  referenceType: z.enum(["character", "style", "character&style", "costume"]).optional(),
+  preferSameOutfit: z.boolean().optional(),
   base64: image, preview, strength: unit, informationExtracted: unit, name: z.string().max(200).optional(), sourceModel: modelSchema.optional(),
   encodings: z.array(z.object({ model: modelSchema.refine(isV4Model), informationExtracted: unit, data: z.string().transform(encodedData), key: z.string().max(200).optional() })).max(256).optional(),
-}).refine(ref => ref.base64 || ref.encodings?.length, "A Vibe needs an image or encoding.");
+};
+const referenceSchema = z.object(referenceFields).refine(ref => ref.base64 || ref.encodings?.length, "A Vibe needs an image or encoding.");
+const preciseReferenceSchema = z.object({ ...referenceFields, base64: image.min(1), strength: z.number().min(0).max(5) });
 const characterSchema = z.object({
   prompt: z.string().max(100000), uc: z.string().max(100000), center: z.object({ x: unit, y: unit }), enabled: z.boolean(),
   name: z.string().max(200).optional(), collapsed: z.boolean().optional(),
@@ -63,8 +66,8 @@ export function exportStylePresets(presets: StylePreset[]): string {
 export function validateStoredPresets(value: unknown): StylePreset[] {
   return z.array(presetSchema).max(200).parse(value);
 }
-export function validateStoredReferences(value: unknown): ReferenceImage[] {
-  return z.array(referenceSchema).max(MAX_VIBES).parse(value);
+export function validateStoredReferences(value: unknown, field: "directorReference" | "vibe" = "vibe"): ReferenceImage[] {
+  return z.array(field === "directorReference" ? preciseReferenceSchema : referenceSchema).max(MAX_VIBES).parse(value);
 }
 export function applyStylePreset(current: GenerationSettings, preset: StylePreset, append = true): GenerationSettings {
   if (preset.kind === "vibe") {

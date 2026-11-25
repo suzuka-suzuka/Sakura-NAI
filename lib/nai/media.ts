@@ -24,20 +24,37 @@ export async function parseImage(blob: Blob) {
   } finally { bitmap.close(); }
 }
 
-/** Fit character references into the service's supported canvas, without cropping. */
-export async function prepareDirectorReference(base64: string) {
+// V5 uses the largest short side fitting one megapixel on a 64-pixel grid.
+const v5ReferenceBuckets: [number, number][] = [];
+for (let long = 1024; long <= 4096; long += 64) {
+  const short = Math.floor(1024 ** 2 / long / 64) * 64;
+  v5ReferenceBuckets.push([short, long]);
+  if (short !== long) v5ReferenceBuckets.push([long, short]);
+}
+
+export async function prepareDirectorReference(base64: string, v5 = false) {
   const bitmap = await decodeImage(new Blob([new Uint8Array(base64ToBytes(base64))]));
   try {
     const ratio = bitmap.width / bitmap.height;
-    const [width, height] = ratio > 1.2 ? [1536, 1024] : ratio < 0.8 ? [1024, 1536] : [1472, 1472];
+    const distance = ([w, h]: [number, number]) => Math.abs(Math.log(ratio) - Math.log(w / h));
+    const [width, height] = v5
+      ? v5ReferenceBuckets.reduce((best, size) => distance(size) < distance(best) ? size : best)
+      : ratio > 1.2 ? [1536, 1024] : ratio < 0.8 ? [1024, 1536] : [1472, 1472];
+    if (v5 && bitmap.width === width && bitmap.height === height) return base64;
     const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
     try {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Unable to prepare reference image");
-      ctx.fillStyle = "black"; ctx.fillRect(0, 0, width, height);
-      const scale = Math.min(width / bitmap.width, height / bitmap.height);
-      const w = bitmap.width * scale, h = bitmap.height * scale;
-      ctx.drawImage(bitmap.source, (width - w) / 2, (height - h) / 2, w, h);
+      if (v5) {
+        const scale = Math.max(width / bitmap.width, height / bitmap.height);
+        const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
+        ctx.drawImage(bitmap.source, -Math.floor((w - width) / 2), -Math.floor((h - height) / 2), w, h);
+      } else {
+        ctx.fillStyle = "black"; ctx.fillRect(0, 0, width, height);
+        const scale = Math.min(width / bitmap.width, height / bitmap.height);
+        const w = bitmap.width * scale, h = bitmap.height * scale;
+        ctx.drawImage(bitmap.source, (width - w) / 2, (height - h) / 2, w, h);
+      }
       const url = canvas.toDataURL("image/png");
       if (!url.startsWith("data:image/png;base64,")) throw new Error("Unable to prepare reference image");
       return url.split(",")[1];

@@ -3,7 +3,7 @@
 import { translateUI, useLocale } from "@/lib/i18n";
 import { isMediumModel } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
-import { NOISE_OPTIONS, isV5Model, isV4Model } from "@/lib/nai/models";
+import { NOISE_OPTIONS, isV5Model, isV4Model, supportsPreciseReference } from "@/lib/nai/models";
 import { Field, Section } from "./field";
 import { Select } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -70,21 +70,19 @@ export function AdvancedTab() {
         </Field>
       </Section>
 
-      {v5 ? <p className="text-xs text-muted">{translateUI("V5 does not support Vibe Transfer or character reference images yet. Saved references are kept for other models.")}</p> : <>
-      <Section title={translateUI("Vibe transfer")} description={translateUI("{0} reference{1}", s.vibe.length, s.vibe.length === 1 ? "" : "s")} collapsible defaultOpen={s.vibe.length > 0}>
+      {!v5 && <Section title={translateUI("Vibe transfer")} description={translateUI("{0} reference{1}", s.vibe.length, s.vibe.length === 1 ? "" : "s")} collapsible defaultOpen={s.vibe.length > 0}>
         <ReferenceUploader field="vibe" emptyLabel={translateUI("Transfer the vibe of reference images.")} />
-      </Section>
+      </Section>}
 
-      {s.model.includes("4-5") && <Section
+      {supportsPreciseReference(s.model) && s.imageSource?.mode !== "infill" && <Section
         title={translateUI("Precise reference")}
         description={translateUI("{0} reference{1}", s.directorReference.length, s.directorReference.length === 1 ? "" : "s")}
         collapsible
         defaultOpen={s.directorReference.length > 0}
       >
-        {s.vibe.length > 0 && <p className="mb-2 text-xs text-muted">{translateUI("Precise reference takes priority over Vibe Transfer.")}</p>}
-        <ReferenceUploader field="directorReference" emptyLabel={translateUI("Guide character features, art style, or both from a reference.")} />
+        {!v5 && s.vibe.length > 0 && <p className="mb-2 text-xs text-muted">{translateUI("Precise reference takes priority over Vibe Transfer.")}</p>}
+        <ReferenceUploader field="directorReference" />
       </Section>}
-      </>}
     </>
   );
 }

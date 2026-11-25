@@ -4,7 +4,7 @@ import { translateUI } from "@/lib/i18n";
 import { toast } from "sonner";
 import { useStore } from "./store";
 import { Model } from "./nai/protocol";
-import { generationSize, maxCharacters } from "./nai/models";
+import { generationSize, maxCharacters, supportsPreciseReference, isV5Model } from "./nai/models";
 import { recipeReproductionMessage, type ImportedRecipe } from "./nai/import-recipe";
 import { type GenerationSettings } from "./nai/types";
 import { isImageFile, pickImageFile } from "./image-picker";
@@ -131,7 +131,7 @@ export async function prepareImageImport(file: File | null | undefined): Promise
   }
 }
 
-/** Apply the selected purpose; references append to the chosen list and select V4.5 Full. */
+/** Apply the selected purpose; preserve the selected model when it supports precise reference. */
 export function applyImageImport(purpose: ImageImportPurpose, options = DEFAULT_RECIPE_IMPORT): boolean {
   const store = useStore.getState();
   const image = store.imageImport;
@@ -161,12 +161,18 @@ export function applyImageImport(purpose: ImageImportPurpose, options = DEFAULT_
     useStore.setState({ selectedImage: imported, selectedBatch: [imported], lastError: null });
     toast.success(translateUI("Imported {0} as a base image. Your prompt and settings were kept.", image.filename), { id: DROP_TOAST_ID });
   } else {
-    store.patchSettings({ model: Model.V4_5, [purpose]: [...store.settings[purpose], {
-      base64: image.base64, preview: image.preview, strength: 0.6, informationExtracted: 1,
+    if (purpose === "directorReference" && store.settings.imageSource?.mode === "infill") return false;
+    if (store.settings[purpose].length >= MAX_VIBES) {
+      toast.error(translateUI("You can add up to {0} reference images.", MAX_VIBES));
+      return false;
+    }
+    const model = purpose === "directorReference" && supportsPreciseReference(store.settings.model) ? store.settings.model : Model.V4_5;
+    store.patchSettings({ model, [purpose]: [...store.settings[purpose], {
+      base64: image.base64, preview: image.preview, name: image.filename, strength: isV5Model(model) ? 1 : 0.6, informationExtracted: 1,
     }] });
     toast.success(translateUI(purpose === "vibe"
       ? "Added {0} for Vibe Transfer. Model switched to V4.5 Full."
-      : "Added {0} as a character reference. Model switched to V4.5 Full.", image.filename), { id: DROP_TOAST_ID });
+      : model === store.settings.model ? "Added {0} as a precise reference." : "Added {0} as a precise reference. Model switched to V4.5 Full.", image.filename), { id: DROP_TOAST_ID });
   }
   store.closeEnhancement();
   store.setUI({ imageImport: null, activeTab: "basic", settingsCollapsed: false, galleryOpen: false,
