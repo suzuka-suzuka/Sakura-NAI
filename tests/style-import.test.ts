@@ -17,7 +17,7 @@ import { generationPngMetadata, preserveCanvasMetadata } from "../lib/nai/png-me
 import { extractImageMetadata } from "../lib/nai/media";
 import { recipeFromNovelAIMetadata } from "../lib/nai/import-recipe";
 import { selectedRecipeSettings, prepareImageImport, DEFAULT_RECIPE_IMPORT } from "../lib/recipe-import";
-import { prepareStyleImport } from "../lib/style-import";
+import { isStyleFile, prepareStyleImport } from "../lib/style-import";
 import { useStore } from "../lib/store";
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jSFkAAAAASUVORK5CYII=";
@@ -175,7 +175,7 @@ test("Vibe normalization survives PNG metadata, selective import and Sakura pres
     assert.equal(selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, settings: false }).normalizeReferenceStrength, enabled);
     assert.equal(selectedRecipeSettings(current, recipe, { ...DEFAULT_RECIPE_IMPORT, vibes: false }).normalizeReferenceStrength, !enabled);
     for (const kind of ["vibe", "settings"] as const) {
-      const [preset] = parseStylePresets(exportStylePresets([createStylePreset("归一化", kind, s)]), "preset.json");
+      const [preset] = parseStylePresets(exportStylePresets([createStylePreset("归一化", kind, s)]));
       assert.equal(applyStylePreset(current, preset).normalizeReferenceStrength, enabled);
     }
   }
@@ -213,14 +213,14 @@ test("prompt and full generation presets round-trip known fields, strip secrets,
   const withSecret = { ...full, token: "secret-token" };
   const serialized = exportStylePresets([withSecret, prompt]);
   assert.equal(serialized.includes("secret-token"), false);
-  const imported = parseStylePresets(serialized, "presets.json");
+  const imported = parseStylePresets(serialized);
   assert.notEqual(imported[0].id, full.id); assert.equal(imported[1].name, "画师串");
   const appended = applyStylePreset(settings(), prompt, true);
   assert.equal(appended.prompt, "current subject, artist:example"); assert.equal(appended.qualityToggle, DEFAULT_SETTINGS.qualityToggle);
   const replaced = applyStylePreset(settings({ vibe: refs() }), full, true);
   assert.equal(replaced.prompt, "artist:example"); assert.equal(replaced.seed, 123); assert.equal(replaced.steps, 23); assert.deepEqual(replaced.vibe, []);
-  assert.equal(parseStylePresets("artist:example, watercolor", "watercolor.txt")[0].kind, "prompt");
-  assert.throws(() => parseStylePresets('{"token":"secret"}', "unknown.json"), /Sakura/);
+  assert.equal(isStyleFile("watercolor.txt"), false);
+  assert.throws(() => parseStylePresets('{"token":"secret"}'), /Sakura/);
 });
 
 test("IndexedDB persists active references and named presets separately from localStorage and gallery data", async () => {
@@ -274,6 +274,7 @@ test("file import is reviewable and atomic: failed bundles never overwrite the c
   const pending = useStore.getState().styleImport;
   assert.equal(pending?.presets[0].kind, "vibe");
   assert.equal(await prepareStyleImport([new File([JSON.stringify(official())], "valid.naiv4vibe"), new File(["broken"], "bad.naiv4vibe")]), false);
+  assert.equal(await prepareStyleImport([new File(["artist:example, watercolor"], "watercolor.txt")]), false);
   assert.equal(useStore.getState().styleImport, pending); assert.equal(useStore.getState().settings, before);
 });
 

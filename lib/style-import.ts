@@ -8,8 +8,8 @@ import { parseVibeFile, isVibeFile } from "./nai/vibes";
 import { beginFileImport, isLatestFileImport, FILE_IMPORT_TOAST_ID } from "./file-import-request";
 
 export type StyleImportCandidate = { presets: StylePreset[]; filename: string };
-export const STYLE_FILE_ACCEPT = ".naiv4vibe,.naiv4vibebundle,.json,.txt";
-export const isStyleFile = (name: string) => isVibeFile(name) || /\.(json|txt)$/i.test(name);
+export const STYLE_FILE_ACCEPT = ".naiv4vibe,.naiv4vibebundle,.json";
+export const isStyleFile = (name: string) => isVibeFile(name) || /\.json$/i.test(name);
 export async function prepareStyleImport(files: File[]): Promise<boolean> {
   const state = useStore.getState();
   if (state.isGenerating || state.isPreparing || state.isDirectorProcessing || state.imageEditor || state.pendingPayment || state.showConnect || state.showDirector) return false;
@@ -24,8 +24,8 @@ export async function prepareStyleImport(files: File[]): Promise<boolean> {
       if (isVibeFile(file.name)) {
         const vibes = parseVibeFile(text, file.name);
         presets.push(createStylePreset(file.name.replace(/\.naiv4vibe(?:bundle)?$/i, ""), "vibe", { ...useStore.getState().settings, vibe: vibes }));
-      } else if (/\.(json|txt)$/i.test(file.name)) presets.push(...parseStylePresets(text, file.name));
-      else throw new Error("Choose a Vibe file, Sakura preset JSON, or plain text prompt.");
+      } else if (/\.json$/i.test(file.name)) presets.push(...parseStylePresets(text));
+      else throw new Error("Choose a Vibe file or Sakura preset JSON.");
     }
     if (!isLatestFileImport(request)) return false;
     const current = useStore.getState();

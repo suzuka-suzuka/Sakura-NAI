@@ -80,7 +80,7 @@ function LibraryContent() {
         const files = Array.from(event.target.files ?? []); event.target.value = "";
         if (files.length) void prepareStyleImport(files);
       }} />
-      <p className="mt-2 text-xs leading-relaxed text-muted">{t("Vibe files and bundles, Sakura preset JSON, or plain text artist / prompt tags.")}</p>
+      <p className="mt-2 text-xs leading-relaxed text-muted">{t("Vibe files and bundles, or Sakura preset JSON.")}</p>
     </div>
     {status === "error" && <p role="alert" className="text-sm text-danger">{t("Local storage is unavailable. You can apply imports, but presets cannot be saved in this browser.")}</p>}
     <fieldset disabled={disabled} className="flex flex-wrap gap-4 text-sm">

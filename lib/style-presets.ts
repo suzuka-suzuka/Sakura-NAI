@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_SETTINGS, type GenerationSettings, type ReferenceImage } from "./nai/types";
+import { type GenerationSettings, type ReferenceImage } from "./nai/types";
 import { MODEL_OPTIONS, NOISE_OPTIONS, SAMPLER_OPTIONS, maxCharacters, isV4Model } from "./nai/models";
 import { MAX_GENERATION_PIXELS, isGenerationDimension } from "./nai/dimensions";
 import { compatibleVibeModel, encodedData, MAX_VIBES } from "./nai/vibes";
@@ -47,16 +47,11 @@ export function createStylePreset(name: string, kind: StylePreset["kind"], setti
   return presetSchema.parse({ id: crypto.randomUUID(), name, kind, createdAt: new Date().toISOString(),
     ...(kind === "vibe" ? { vibes: structuredClone(settings.vibe), normalizeReferenceStrength: settings.normalizeReferenceStrength } : { settings: { ...settings, qualityPreset: settings.qualityPreset ?? (settings.qualityToggle ? "standard" : "none") } }) });
 }
-export function parseStylePresets(text: string, filename: string): StylePreset[] {
-  if (/\.txt$/i.test(filename)) {
-    const prompt = text.replace(/^\uFEFF/, "").trim();
-    if (!prompt) throw new Error("The prompt file is empty.");
-    return [createStylePreset(filename.replace(/\.txt$/i, ""), "prompt", { ...DEFAULT_SETTINGS, prompt, qualityToggle: false, qualityPreset: "none", ucPreset: 3 })];
-  }
+export function parseStylePresets(text: string): StylePreset[] {
   let value: unknown;
   try { value = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { throw new Error("This preset file is not valid JSON."); }
   const envelope = value as { identifier?: string; version?: number; presets?: unknown[] } | null;
-  if (envelope?.identifier !== "sakura-nai-presets" || envelope.version !== 1 || !Array.isArray(envelope.presets) || !envelope.presets.length || envelope.presets.length > 200) throw new Error("Use a Sakura preset JSON file or a plain text prompt file.");
+  if (envelope?.identifier !== "sakura-nai-presets" || envelope.version !== 1 || !Array.isArray(envelope.presets) || !envelope.presets.length || envelope.presets.length > 200) throw new Error("Use a Sakura preset JSON file.");
   return envelope.presets.map(entry => ({ ...presetSchema.parse(entry), id: crypto.randomUUID() }));
 }
 export function exportStylePresets(presets: StylePreset[]): string {

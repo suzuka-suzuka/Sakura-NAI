@@ -25,7 +25,7 @@ test("style apply mode survives closing, applying, importing and reloading, in b
   const { loadUIPrefs } = await import("../lib/nai/client");
   const { DEFAULT_SETTINGS } = await import("../lib/nai/types");
   const { Model } = await import("../lib/nai/protocol");
-  const { createStylePreset, applyStylePreset } = await import("../lib/style-presets");
+  const { createStylePreset, applyStylePreset, exportStylePresets } = await import("../lib/style-presets");
   const { prepareStyleImport } = await import("../lib/style-import");
   const ref = { base64: "AQID", preview: "", strength: 0.6, informationExtracted: 1 };
   const current = { ...DEFAULT_SETTINGS, model: Model.V4_5, prompt: "old prompt", negativePrompt: "old negative", vibe: [ref] };
@@ -47,7 +47,7 @@ test("style apply mode survives closing, applying, importing and reloading, in b
     assert.deepEqual(appliedVibe.vibe, append ? [...current.vibe, ...incoming.vibe] : incoming.vibe);
     useStore.getState().restoreSettings(applied);
     useStore.getState().setUI({ showStyleLibrary: false, styleImport: null });
-    assert.equal(await prepareStyleImport([new File(["imported prompt"], "style.txt")]), true);
+    assert.equal(await prepareStyleImport([new File([exportStylePresets([prompt])], "style.json")]), true);
     assert.equal(useStore.getState().styleAppend, append);
 
     // Exercise the actual debounced write, then restore through the app's init path.
