@@ -4,7 +4,7 @@
 import { useId, useRef, useState } from "react";
 import { ArrowLeftRight, Expand, Pencil, Upload, Trash2, RectangleHorizontal, RectangleVertical, Square, ImagePlus, Eraser, PanelTopClose, PanelTopOpen, Palette } from "lucide-react";
 import { EffortToggle } from "./effort-toggle";
-import { isMediumModel, V5_FULL, V5_FULL_MEDIUM } from "@/lib/nai/models";
+import { isMediumModel, V5_CURATED, V5_FULL, V5_FULL_MEDIUM } from "@/lib/nai/models";
 import { useStore } from "@/lib/store";
 import { MAX_GENERATION_DIMENSION, snapGenerationDimension } from "@/lib/nai/dimensions";
 import { translateUI as t, useLocale } from "@/lib/i18n";
@@ -159,6 +159,7 @@ export function OfficialComposer() {
       </Select></div>
       {(isV5Model(s.model) || isV4Model(s.model)) && <button aria-label={t("Prompt mode")} title={t("Furry mode adds fur dataset at the start of the prompt.")} className="shrink-0 rounded bg-surface-2 px-2 py-2 text-xs" onClick={()=>patch({promptMode:s.promptMode === "furry" ? "anime" : "furry"})}>{s.promptMode === "furry" ? "Furry" : "Anime"}</button>}
     </div>
+    {s.model === V5_CURATED && s.imageSource?.mode === "infill" && <p className="px-3 pb-3 text-xs text-muted">{t("V5 Curated uses V4.5 Curated for inpainting, with up to 6 characters.")}</p>}
     <div className="px-3 pb-3"><button type="button" onClick={() => useStore.getState().setUI({ showStyleLibrary: true })} className="flex w-full items-center justify-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs font-semibold text-accent transition-colors hover:bg-accent/10"><Palette className="size-4" />{t("Import style / preset")}</button></div>
     <div className="px-3 pb-3"><EffortToggle /></div>
     <PromptSection />

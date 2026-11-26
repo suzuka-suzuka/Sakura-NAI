@@ -3,6 +3,7 @@ import { isV4Model, isV5Model, isMediumModel } from "./models";
 import { activePreciseReferences } from "./precise-reference";
 import type { GenerationSettings } from "./types";
 import { imageToolOutputSize } from "./image-tools";
+import { effectiveInpaintingSettings } from "./image-input";
 
 export type AccountInfo = {
   tier: number;
@@ -58,7 +59,7 @@ export function augmentCost(width: number, height: number, backgroundRemoval: bo
  * Unknown accounts never display a free price. Final billing remains server-controlled.
  */
 export function estimateCost(s: GenerationSettings, account: AccountInfo | null, uncachedVibes = 0): CostEstimate {
-  s = effectiveEffortSettings(s);
+  s = effectiveEffortSettings(effectiveInpaintingSettings(s));
   const v5 = isV5Model(s.model);
   const medium = isMediumModel(s.model);
   const active = !!account && ([1, 2, 3, 4].includes(account.accountType ?? 0) ||

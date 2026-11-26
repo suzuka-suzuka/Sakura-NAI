@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SETTINGS, type ImageSource } from "../lib/nai/types";
+import { DEFAULT_SETTINGS, type GenerationSettings, type ImageSource } from "../lib/nai/types";
 import { buildPayload } from "../lib/nai/payload";
 import { estimateCost, augmentCost, upscaleCost } from "../lib/nai/cost";
 import { Model } from "../lib/nai/protocol";
 import { floodFill, opaqueMask } from "../lib/canvas-tools";
 import { saveSettings, NaiClient } from "../lib/nai/client";
-import { generationSize } from "../lib/nai/models";
+import { generationSize, V5_CURATED, V5_FULL, V5_FULL_MEDIUM } from "../lib/nai/models";
 import { quantizePalette } from "../lib/pixel-snap";
 import { imageToolSettings, activeGenerationSettings, enhanceFactors, enhancePrompt, imageToolOutputSize, ENHANCE_LEVELS, type Enhancement } from "../lib/nai/image-tools";
 import { resizeFrame, frameMask, zoomAt, focusedCrop } from "../lib/editor-geometry";
@@ -140,6 +140,39 @@ test("inpainting uses matching canvas/mask, dedicated model, and rejects incompl
   assert.equal(estimateCost({...DEFAULT_SETTINGS,width:1024,height:1024,imageSource},null).total,30);
   assert.equal(estimateCost({...DEFAULT_SETTINGS,width:1536,height:1536,imageSource},null).total,68);
   assert.throws(()=>buildPayload({...DEFAULT_SETTINGS,imageSource:{...source,strength:NaN}},0),/strength/);
+});
+
+test("inpainting selects the official model ID for each generation model", () => {
+  const imageSource = { ...source, mode: "infill" as const, mask: "data:image/png;base64,bWFzaw==" };
+  for (const [model, expected] of [
+    [Model.V3, "nai-diffusion-3-inpainting"],
+    [Model.FURRY, "nai-diffusion-furry-3-inpainting"],
+    [Model.V4, "nai-diffusion-4-full-inpainting"],
+    [Model.V4_CUR, "nai-diffusion-4-curated-inpainting"],
+    [Model.V4_5, "nai-diffusion-4-5-full-inpainting"],
+    [Model.V4_5_CUR, "nai-diffusion-4-5-curated-inpainting"],
+    [V5_FULL, "nai-diffusion-5-full-inpainting"],
+    [V5_FULL_MEDIUM, "nai-diffusion-5-full-medium-inpainting"],
+    [V5_CURATED, "nai-diffusion-4-5-curated-inpainting"],
+  ] as const) {
+    assert.equal(buildPayload({ ...DEFAULT_SETTINGS, model, imageSource }, 17).model, expected);
+    assert.equal(buildPayload({ ...DEFAULT_SETTINGS, model, imageSource: source }, 17).model, model);
+    assert.equal(buildPayload({ ...DEFAULT_SETTINGS, model }, 17).model, model);
+  }
+});
+
+test("V5 Curated inpainting uses the V4.5 payload and pricing even with exhausted V5 stamina", () => {
+  const settings: GenerationSettings = {
+    ...DEFAULT_SETTINGS, model: V5_CURATED, steps: 28, transparentBackground: true,
+    imageSource: { ...source, mode: "infill", focused: true, mask: "data:image/png;base64,bWFzaw==" },
+  };
+  const v45 = { ...settings, model: Model.V4_5_CUR };
+  assert.deepEqual(buildPayload(settings, 17), buildPayload(v45, 17));
+  const opus = { tier: 3, active: true, anlas: 1000, usage: { percent: 0, isNegative: true }, relayStaminaImages: 0 };
+  assert.deepEqual(estimateCost(settings, opus), estimateCost(v45, opus));
+  assert.equal(estimateCost(settings, opus).total, 0);
+  assert.equal(estimateCost(settings, opus).usesAllowance, false);
+  assert.equal(settings.model, V5_CURATED);
 });
 
 test("zoom anchors the pixel under an off-center pointer, so top and bottom details stay reachable", () => {

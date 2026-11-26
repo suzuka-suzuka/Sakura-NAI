@@ -1,10 +1,27 @@
-import type { GenerationPayload } from "./protocol";
+import { Model, type GenerationPayload } from "./protocol";
 import type { GenerationSettings } from "./types";
-import { isV5Model } from "./models";
+import { isV5Model, V5_CURATED, V5_FULL, V5_FULL_MEDIUM, type GenerationModel } from "./models";
 import { compositeInpainting, prepareInpaintingMasks } from "./inpainting-composite";
 import { throwIfAborted } from "./abort";
 
 const imageBytes = (url: string) => url.replace(/^data:image\/[^;]+;base64,/, "");
+
+const INPAINTING_MODELS: Record<GenerationModel, string> = {
+  [Model.V3]: "nai-diffusion-3-inpainting",
+  [Model.FURRY]: "nai-diffusion-furry-3-inpainting",
+  [Model.V4]: "nai-diffusion-4-full-inpainting",
+  [Model.V4_CUR]: "nai-diffusion-4-curated-inpainting",
+  [Model.V4_5]: "nai-diffusion-4-5-full-inpainting",
+  [Model.V4_5_CUR]: "nai-diffusion-4-5-curated-inpainting",
+  [V5_FULL]: "nai-diffusion-5-full-inpainting",
+  [V5_FULL_MEDIUM]: "nai-diffusion-5-full-medium-inpainting",
+  [V5_CURATED]: "nai-diffusion-4-5-curated-inpainting",
+};
+
+/** NovelAI uses V4.5 Curated for V5 Curated inpainting. */
+export function effectiveInpaintingSettings(s: GenerationSettings): GenerationSettings {
+  return s.model === V5_CURATED && s.imageSource?.mode === "infill" ? { ...s, model: Model.V4_5_CUR } : s;
+}
 
 /** Image and mask data are submitted explicitly; website-only cache keys are never needed. */
 export function applyImageInput(payload: GenerationPayload, s: GenerationSettings, seed: number): GenerationPayload {
@@ -26,7 +43,7 @@ export function applyImageInput(payload: GenerationPayload, s: GenerationSetting
     if (![image.width, image.height].every(n => Number.isInteger(n) && n > 0)) throw new Error("Invalid source image dimensions");
     if (!Number.isFinite(image.inpaintStrength) || image.inpaintStrength < 0 || image.inpaintStrength > 1)
       throw new Error("Invalid inpainting strength");
-    payload.model = `${s.model}-inpainting`;
+    payload.model = INPAINTING_MODELS[s.model];
     p.mask = imageBytes(image.mask);
     p.inpaintImg2ImgStrength = image.inpaintStrength;
     if (image.inpaintStrength !== 1 && (isV5Model(s.model) || s.model.includes("diffusion-4")))

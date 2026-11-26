@@ -608,6 +608,7 @@
   "Canvas height": "画布高度",
   "Apply canvas size": "应用画布尺寸",
   "Focused inpainting": "聚焦重绘",
+  "V5 Curated uses V4.5 Curated for inpainting, with up to 6 characters.": "V5 Curated 重绘使用 V4.5 Curated，最多支持 6 个角色。",
   "Upscale the masked region for detail, then blend it back. Pixels beyond the softened edge stay intact.": "放大蒙版区域生成细节，再柔和地贴回原图，柔化边缘以外的区域保持不变。",
   "Reading image and generation metadata…": "正在读取图片和生成参数…",
   "Select image purpose": "选择图片用途",

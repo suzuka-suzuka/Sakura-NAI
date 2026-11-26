@@ -7,6 +7,7 @@ import { pixelSnap } from "@/lib/pixel-snap";
 import { readImageDimensions } from "@/lib/nai/image-decode";
 import { base64ToBytes, Image as NaiImage } from "@/lib/nai/protocol";
 import { buildPayload } from "@/lib/nai/payload";
+import { effectiveInpaintingSettings } from "@/lib/nai/image-input";
 import { DEFAULT_PREFERENCES, loadGenerationPreferences, saveGenerationPreferences, estimateCost, augmentCost, upscaleCost, type AccountInfo, type GenerationPreferences } from "@/lib/nai/cost";
 import { create } from "zustand";
 import { AccountQueryError } from "@/lib/nai/account";
@@ -596,7 +597,8 @@ export const useStore = create<Store>()((set, get) => ({
   clearError: () => set({ lastError: null }),
   generate: async (approved, submitted) => {
     const { client } = get();
-    const settings = structuredClone(effectiveEffortSettings(approved?.settings ?? submitted ?? activeGenerationSettings(get().settings, get().enhancement)));
+    const draft = approved?.settings ?? submitted ?? activeGenerationSettings(get().settings, get().enhancement);
+    const settings = structuredClone(effectiveEffortSettings(effectiveInpaintingSettings(draft)));
     if (get().isGenerating || get().isPreparing || get().isDirectorProcessing || get().pendingPayment) return;
     if (!client || get().connectionStatus === "invalid") {
       set({ showConnect: true });
