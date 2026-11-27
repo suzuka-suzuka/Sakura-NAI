@@ -61,7 +61,7 @@ export function writePngMetadata(bytes: Uint8Array, entries: MetadataEntry[], re
 }
 
 async function readEntries(bytes: Uint8Array) {
-  try { return (await extractImageMetadata(new Blob([new Uint8Array(bytes)]))).entries; }
+  try { return (await extractImageMetadata(bytes)).entries; }
   catch { return []; } // Damaged optional metadata must not prevent saving a finished image.
 }
 function commentObject(entries: MetadataEntry[]): Record<string, unknown> {

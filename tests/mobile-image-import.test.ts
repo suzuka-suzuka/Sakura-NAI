@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { gzipSync, zlibSync } from "fflate";
 import { toast } from "sonner";
 import { extractImageMetadata, parseImage, prepareDirectorReference } from "../lib/nai/media";
+import { parseReference } from "../lib/nai/client";
 import { readExifMetadata } from "../lib/nai/exif-metadata";
 import { readImageDimensions } from "../lib/nai/image-decode";
 import { importNovelAIRecipe } from "../lib/nai/import-recipe";
@@ -89,6 +90,31 @@ function browser(t: TestContext) {
   return canvas;
 }
 beforeEach(() => useStore.setState(useStore.getInitialState(), true));
+
+test("uploaded and dropped Vibes use a small thumbnail while Image2Image still uses the original", async t => {
+  const canvas = browser(t);
+  global(t, "createImageBitmap", async () => ({ width: 4032, height: 3024, close() {} }));
+  const preview = "data:image/png;base64,dGh1bWI=";
+  canvas.toDataURL = () => {
+    assert.deepEqual([canvas.width, canvas.height], [192, 144]);
+    return preview;
+  };
+  const bytes = png();
+  const file = new File([bytes], "source.png", { type: "image/png" });
+  const picked = await parseReference(file);
+  assert.deepEqual(base64ToBytes(picked.base64), bytes);
+  assert.equal(picked.preview, preview);
+  assert.deepEqual([canvas.width, canvas.height], [0, 0]);
+  useStore.setState({ showConnect: false });
+  assert.equal(await prepareImageImport(file), true);
+  assert.equal(applyImageImport("vibe"), true);
+  const [ref] = useStore.getState().settings.vibe;
+  assert.equal(ref.base64, picked.base64);
+  assert.equal(ref.preview, preview);
+  assert.equal(await prepareImageImport(file), true);
+  assert.equal(applyImageImport("img2img"), true);
+  assert.equal(useStore.getState().settings.imageSource?.dataUrl, `data:image/png;base64,${picked.base64}`);
+});
 
 test("dropping a precise reference keeps the selected V5 model", async t => {
   browser(t);

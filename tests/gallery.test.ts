@@ -116,6 +116,25 @@ test("store loads only one page, merges more without duplicates, and clears unlo
   assert.equal(useStore.getState().galleryNext, null);
 });
 
+test("compact history releases older saved images after generation and pages them back in whole batches", async t => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { matchMedia: () => ({ matches: true }) } });
+  t.after(() => {
+    if (descriptor) Object.defineProperty(globalThis, "window", descriptor);
+    else Reflect.deleteProperty(globalThis, "window");
+  });
+  await seed(13);
+  await saveImages(Array.from({ length: 5 }, (_, i) => picture(100, i, 5)));
+  await useStore.getState().loadGallery();
+  assert.equal(useStore.getState().images.length, 8);
+  await useStore.getState().loadMoreGallery();
+  assert.equal(useStore.getState().images.length, 16);
+  await useStore.getState().appendGalleryImages(Array.from({ length: 4 }, (_, i) => picture(101, i, 4)));
+  assert.deepEqual(useStore.getState().images.map(image => image.batchId), [101, 101, 101, 101, 100, 100, 100, 100, 100]);
+  while (useStore.getState().galleryNext !== null) await useStore.getState().loadMoreGallery();
+  assert.deepEqual(useStore.getState().images.map(image => image.id), Array.from({ length: 22 }, (_, i) => 22 - i));
+});
+
 test("failed transaction rolls back new images and leaves existing history intact", async t => {
   await seed(5);
   const { IDBObjectStore } = await import("fake-indexeddb");

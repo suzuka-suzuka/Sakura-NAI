@@ -136,7 +136,7 @@ export type GenerateHandle = { seed: number; streaming: boolean; events: AsyncGe
 export class NaiClient {
   private readonly transport: NaiTransport;
   private readonly connection: ConnectionConfig;
-  private readonly vibes = new Map<string, string>();
+  private readonly vibes: { image: string; encoding: VibeEncoding }[] = [];
   private activeController?: AbortController;
   constructor(cfg: ConnectionConfig, private readonly onVibeEncoded?: (ref: ReferenceImage, encoding: VibeEncoding) => void) { this.connection = { ...cfg }; this.transport = new NaiTransport(this.connection); }
   cancelGeneration() { this.activeController?.abort(); }
@@ -144,11 +144,20 @@ export class NaiClient {
   async account() {
     return queryAccount(this.connection);
   }
+  private cachedVibe(ref: ReferenceImage, model: GenerationModel) {
+    return this.vibes.find(({ image, encoding }) => encoding.model === model &&
+      encoding.informationExtracted === ref.informationExtracted && image === ref.base64)?.encoding;
+  }
   uncachedVibes(s: GenerationSettings) {
     if (s.imageSource?.mode === "infill" || !isV4Model(s.model) || activePreciseReferences(s).length) return 0;
-    return new Set(s.vibe.filter(r => !vibeEncoding(r, s.model)).map(r => JSON.stringify([s.model, r.informationExtracted, r.base64])).filter(key => !this.vibes.has(key))).size;
+    const missing: ReferenceImage[] = [];
+    for (const ref of s.vibe) {
+      if (vibeEncoding(ref, s.model) || this.cachedVibe(ref, s.model)) continue;
+      if (!missing.some(other => other.informationExtracted === ref.informationExtracted && other.base64 === ref.base64)) missing.push(ref);
+    }
+    return missing.length;
   }
-  async generate(settings: GenerationSettings, preview = true): Promise<GenerateHandle> {
+  async generate(settings: GenerationSettings, preview = true, previewIntervalMs = 0): Promise<GenerateHandle> {
     const seed = settings.seed >= 0 ? settings.seed : randomSeed();
     buildPayload(settings, seed); // Validate before allocating/decoding a resized image.
     const controller = new AbortController();
@@ -161,7 +170,7 @@ export class NaiClient {
       const payload = buildPayload(prepared, seed);
       const streaming = preview && supportsStreaming(settings.model);
       if (!streaming) delete payload.parameters.stream;
-      const events = this.generationEvents(settings, payload, streaming, controller, inpainting.compose);
+      const events = this.generationEvents(settings, payload, streaming, controller, previewIntervalMs, inpainting.compose);
       return { seed, streaming, events };
     } catch (error) {
       controller.abort();
@@ -170,10 +179,17 @@ export class NaiClient {
     }
   }
 
-  private async *generationEvents(settings: GenerationSettings, payload: ReturnType<typeof buildPayload>, streaming: boolean, controller: AbortController, compose?: (url: string) => Promise<string>): AsyncGenerator<MsgpackEvent> {
+  private async *generationEvents(settings: GenerationSettings, payload: ReturnType<typeof buildPayload>, streaming: boolean, controller: AbortController, previewIntervalMs: number, compose?: (url: string) => Promise<string>): AsyncGenerator<MsgpackEvent> {
     try {
       await this.addReferences(settings, payload.parameters, controller.signal);
+      const lastPreview = new Map<number, number>();
       for await (const event of this.transport.generate(payload, streaming, controller.signal)) {
+        if (previewIntervalMs && event.event_type === EventType.INTERMEDIATE) {
+          const now = performance.now();
+          const previous = lastPreview.get(event.samp_ix);
+          if (previous !== undefined && now - previous < previewIntervalMs) continue;
+          lastPreview.set(event.samp_ix, now);
+        }
         const output = compose ? base64ToBytes(await compose(event.image.toDataURL())) : event.image.data;
         const bytes = event.event_type === EventType.FINAL
           ? await generationPngMetadata(output, payload, event.samp_ix, event.image.data, settings.imageSource?.focused)
@@ -205,17 +221,18 @@ export class NaiClient {
       for (const ref of s.vibe) {
         if (!isV4Model(s.model)) { images.push(ref.base64); continue; }
         // Cache encoded vibes per connection, model, image and extraction amount.
-        const key = JSON.stringify([s.model, ref.informationExtracted, ref.base64]);
-        let encoded = vibeEncoding(ref, s.model)?.data ?? this.vibes.get(key);
-        if (!encoded) {
+        const stored = vibeEncoding(ref, s.model);
+        let encoding = stored ?? this.cachedVibe(ref, s.model);
+        if (!encoding) {
           const bytes = await this.transport.request("/ai/encode-vibe", res => res.arrayBuffer(), { image: ref.base64, model: s.model, information_extracted: ref.informationExtracted }, signal, "application/octet-stream");
-          encoded = bytesToBase64(new Uint8Array(bytes));
-          if (!encoded) throw new Error("The server returned an empty encoded vibe");
-          if (this.vibes.size >= 32) this.vibes.delete(this.vibes.keys().next().value!);
-          this.vibes.set(key, encoded);
+          const data = bytesToBase64(new Uint8Array(bytes));
+          if (!data) throw new Error("The server returned an empty encoded vibe");
+          encoding = { model: s.model, informationExtracted: ref.informationExtracted, data };
+          if (this.vibes.length >= 32) this.vibes.shift();
+          this.vibes.push({ image: ref.base64, encoding });
         }
-        if (!vibeEncoding(ref, s.model)) this.onVibeEncoded?.(ref, { model: s.model, informationExtracted: ref.informationExtracted, data: encoded });
-        images.push(encoded);
+        if (!stored) this.onVibeEncoded?.(ref, encoding);
+        images.push(encoding.data);
       }
       p.reference_image_multiple = images;
       p.reference_strength_multiple = s.vibe.map(r => r.strength);
@@ -268,6 +285,5 @@ export class NaiClient {
 export { EventType, parseImage };
 export type { Image, MsgpackEvent };
 export async function parseReference(file: File | Blob) {
-  const parsed = await parseImage(file);
-  return { base64: parsed.base64, preview: `data:image/png;base64,${parsed.base64}` };
+  return parseImage(file, { thumbnail: true });
 }

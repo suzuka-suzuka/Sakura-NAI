@@ -99,10 +99,9 @@ export async function prepareImageImport(file: File | null | undefined): Promise
   try {
     // Read metadata from the original bytes: canvas re-encoding removes PNG text and stealth data.
     const { extractImageMetadata, parseImage } = await import("@/lib/nai/media");
-    const [parsed, metadata] = await Promise.all([
-      parseImage(file),
-      extractImageMetadata(file).catch(() => null),
-    ]);
+    const metadata = await extractImageMetadata(file).catch(() => null);
+    if (!isLatestFileImport(request)) return false;
+    const parsed = await parseImage(file, { thumbnail: true });
     let recipe: ImportedRecipe | null = null;
     let metadataError = metadata === null;
     if (metadata?.type === "NOVELAI" && metadata.entries.length) {
@@ -121,7 +120,7 @@ export async function prepareImageImport(file: File | null | undefined): Promise
     toast.dismiss(DROP_TOAST_ID);
     if (dropImportBlocked()) return false;
     useStore.getState().setUI({ showStyleLibrary: false, styleImport: null, imageImport: {
-      filename: file.name, ...parsed, preview: `data:image/png;base64,${parsed.base64}`, recipe, metadataError,
+      filename: file.name, ...parsed, recipe, metadataError,
     } });
     return true;
   } catch (error) {
@@ -148,13 +147,14 @@ export function applyImageImport(purpose: ImageImportPurpose, options = DEFAULT_
     });
     warnRecipeLimitations(image.recipe);
   } else if (purpose === "img2img") {
+    const dataUrl = `data:image/png;base64,${image.base64}`;
     store.patchSettings({ ...generationSize(image.width, image.height), imageSource: {
-      dataUrl: image.preview, width: image.width, height: image.height,
+      dataUrl, width: image.width, height: image.height,
       mode: "img2img", strength: 0.7, noise: 0, inpaintStrength: 1,
     } });
     const settings = structuredClone(useStore.getState().settings);
     const imported = {
-      dataUrl: image.preview, settings: { ...settings, width: image.width, height: image.height },
+      dataUrl, settings: { ...settings, width: image.width, height: image.height },
       filename: image.filename, seed: -1, timestamp: new Date().toISOString(),
       batchId: Date.now(), batchIndex: 0, batchSize: 1,
     };

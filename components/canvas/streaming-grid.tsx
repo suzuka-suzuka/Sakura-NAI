@@ -9,6 +9,7 @@ import { DEFAULT_CONNECTION } from "@/lib/nai/client";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { fitPreviewGrid } from "@/lib/preview-layout";
 import { imageToolOutputSize } from "@/lib/nai/image-tools";
+import { useCompactLayout } from "@/lib/use-compact-layout";
 
 const mmss = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -29,6 +30,7 @@ function useElapsed(startedAt: number | null) {
 /** Live streaming previews — each sample denoises in place behind a progress ring. */
 export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdrop?: string | null }) {
   useLocale();
+  const compact = useCompactLayout();
   const steps = useStore((s) => (s.runSettings ?? s.settings).steps);
   const startedAt = useStore((s) => s.runStartedAt);
   const width = useStore((s) => imageToolOutputSize(s.runSettings ?? s.settings).width);
@@ -64,7 +66,7 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
     <div className="relative flex h-full min-h-0 flex-col items-center overflow-hidden p-3 sm:p-6">
       {/* The image you were looking at when you pressed Generate, held as ambient context so the
           stage never blanks mid-commit. Same treatment as the BatchView backdrop. */}
-      {backdrop && (
+      {backdrop && !compact && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={backdrop}
@@ -139,7 +141,7 @@ export function StreamingGrid({ tiles, backdrop }: { tiles: StreamTile[]; backdr
                 className="h-full w-full object-contain transition-[filter] duration-fast ease-out"
                 style={{
                   filter:
-                    t.status === "done"
+                    compact || t.status === "done"
                       ? undefined
                       : `blur(${((1 - t.progress) ** 1.5 * maxBlur).toFixed(1)}px)`,
                 }}

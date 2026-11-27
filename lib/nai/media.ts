@@ -3,14 +3,36 @@ import { base64ToBytes, bytesToBase64 } from "./protocol";
 import { decodeImage } from "./image-decode";
 import { readContainerExif, readExifMetadata } from "./exif-metadata";
 
-export async function parseImage(blob: Blob) {
+// The upload can be many megapixels. Only the thumbnail is ever displayed in a reference row.
+function referenceThumbnail(bitmap: Awaited<ReturnType<typeof decodeImage>>) {
+  if (typeof document === "undefined") return "";
+  const scale = Math.min(1, 192 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  try {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    ctx.drawImage(bitmap.source, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL("image/png");
+    return url.startsWith("data:image/png;base64,") ? url : "";
+  } catch {
+    // A thumbnail allocation failure must not discard a usable reference.
+    return "";
+  } finally { canvas.width = 0; canvas.height = 0; }
+}
+
+export async function parseImage(blob: Blob, { thumbnail = false } = {}) {
   const bitmap = await decodeImage(blob);
   try {
+    const preview = thumbnail ? referenceThumbnail(bitmap) : "";
     // Keep PNG pixels and metadata intact when merely uploading; canvas export discards both
     // text chunks and alpha-channel metadata. Other formats still normalize to PNG below.
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    if ([137,80,78,71,13,10,26,10].every((value, i) => bytes[i] === value))
-      return { base64: bytesToBase64(bytes), width: bitmap.width, height: bitmap.height };
+    const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+    if ([137,80,78,71,13,10,26,10].every((value, i) => header[i] === value)) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { base64: bytesToBase64(bytes), width: bitmap.width, height: bitmap.height, preview };
+    }
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width; canvas.height = bitmap.height;
     try {
@@ -19,7 +41,7 @@ export async function parseImage(blob: Blob) {
       ctx.drawImage(bitmap.source, 0, 0);
       const dataUrl = canvas.toDataURL("image/png");
       if (!dataUrl.startsWith("data:image/png;base64,")) throw new Error("The image is too large to import on this device.");
-      return { base64: dataUrl.split(",")[1], width: bitmap.width, height: bitmap.height };
+      return { base64: dataUrl.slice("data:image/png;base64,".length), width: bitmap.width, height: bitmap.height, preview };
     } finally { canvas.width = 0; canvas.height = 0; }
   } finally { bitmap.close(); }
 }
@@ -93,13 +115,13 @@ const join = (parts: Uint8Array[]) => {
 };
 
 /** Read file metadata before decoding pixels, regardless of the picker-supplied MIME type. */
-export async function extractImageMetadata(blob: Blob): Promise<{ type: string; entries: Entry[] }> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+export async function extractImageMetadata(source: Blob | Uint8Array): Promise<{ type: string; entries: Entry[] }> {
+  const bytes = source instanceof Uint8Array ? source : new Uint8Array(await source.arrayBuffer());
   if (bytes.length < 33 || ![137,80,78,71,13,10,26,10].every((v,i) => bytes[i] === v)) {
     const entries = readContainerExif(bytes);
     return { type: isNovelAI(entries) ? "NOVELAI" : "UNKNOWN", entries };
   }
-  const view = new DataView(bytes.buffer), entries: Entry[] = [], idat: Uint8Array[] = [];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), entries: Entry[] = [], idat: Uint8Array[] = [];
   let metadataError: unknown;
   const width = view.getUint32(16), height = view.getUint32(20);
   for (let offset = 8; offset + 12 <= bytes.length;) {

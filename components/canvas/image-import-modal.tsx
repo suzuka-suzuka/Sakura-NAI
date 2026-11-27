@@ -19,7 +19,7 @@ export function ImageImportModal() {
   const busy = useStore(s => s.isGenerating || s.isPreparing || s.isDirectorProcessing || !!s.pendingPayment);
   const close = () => setUI({ imageImport: null });
   return <Modal open={!!image} onClose={close} title={t("Select image purpose")} className="max-w-xl">
-    {image && <ImportContent key={image.preview} image={image} busy={busy} close={close} />}
+    {image && <ImportContent key={image.base64} image={image} busy={busy} close={close} />}
   </Modal>;
 }
 
@@ -35,7 +35,7 @@ function ImportContent({ image, busy, close }: { image: ImageImportCandidate; bu
   return <>
       <div className="mb-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-border-soft bg-surface-2 p-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={image.preview} alt={image.filename} className="size-20 shrink-0 rounded-lg object-contain" />
+        {image.preview && <img src={image.preview} alt={image.filename} className="size-20 shrink-0 rounded-lg object-contain" />}
         <div className="min-w-0 text-sm">
           <p className="break-all font-semibold text-fg">{image.filename}</p>
           <p className="mt-1 text-xs text-muted">{image.width} × {image.height}</p>

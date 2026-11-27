@@ -101,12 +101,56 @@ function eventFrom(value: unknown): MsgpackEvent | null {
   return { event_type: e.event_type, samp_ix: Number(e.samp_ix), step_ix: Number(e.step_ix ?? 0), image };
 }
 
+/** Fill each split frame once. A decoded image may retain its frame after the next read. */
+async function* messagePackFrames(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  const header = new Uint8Array(4);
+  const headerView = new DataView(header.buffer);
+  let headerBytes = 0, length = 0, written = 0;
+  let partial: Uint8Array | undefined;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    let offset = 0;
+    while (offset < value.length) {
+      if (!length) {
+        const take = Math.min(4 - headerBytes, value.length - offset);
+        header.set(value.subarray(offset, offset + take), headerBytes);
+        offset += take;
+        headerBytes += take;
+        if (headerBytes < 4) continue;
+        length = headerView.getUint32(0);
+        if (!length || length > 64 * 1024 * 1024) throw new Error("Invalid MessagePack frame length");
+        headerBytes = 0;
+        if (offset === value.length) continue;
+      }
+      const take = Math.min(length - written, value.length - offset);
+      const piece = value.subarray(offset, offset + take);
+      offset += take;
+      if (!written && take === length) {
+        length = 0;
+        yield decode(piece);
+        continue;
+      }
+      partial ??= new Uint8Array(length);
+      partial.set(piece, written);
+      written += take;
+      if (written === length) {
+        const frame = partial;
+        partial = undefined;
+        length = written = 0;
+        yield decode(frame);
+      }
+    }
+  }
+  if (headerBytes || length) throw new Error("Truncated MessagePack frame");
+}
+
 /** Accept arbitrary network chunk boundaries; check complete frames and final sample count. */
 export async function* decodeStream(response: Response, count: number): AsyncGenerator<MsgpackEvent> {
   if (!response.body) throw new Error("The generation response has no body.");
   const reader = response.body.getReader();
   const sse = response.headers.get("content-type")?.includes("text/event-stream");
-  let buffer = new Uint8Array(0), text = "";
+  let text = "";
   const decoder = new TextDecoder(), finals = new Set<number>();
   const check = (value: unknown) => {
     const event = eventFrom(value);
@@ -126,10 +170,10 @@ export async function* decodeStream(response: Response, count: number): AsyncGen
     return check({ ...parsed, event_type: parsed.event_type ?? kind });
   };
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (sse) {
+    if (sse) {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
         text += decoder.decode(value, { stream: true });
         let match: RegExpExecArray | null;
         while ((match = /\r?\n\r?\n/.exec(text))) {
@@ -138,20 +182,15 @@ export async function* decodeStream(response: Response, count: number): AsyncGen
           if (event) yield event;
         }
         if (text.length > 64 * 1024 * 1024) throw new Error("Generation event is too large");
-      } else {
-        const joined = new Uint8Array(buffer.length + value.length); joined.set(buffer); joined.set(value, buffer.length); buffer = joined;
-        while (buffer.length >= 4) {
-          const length = new DataView(buffer.buffer, buffer.byteOffset, 4).getUint32(0);
-          if (!length || length > 64 * 1024 * 1024) throw new Error("Invalid MessagePack frame length");
-          if (buffer.length < length + 4) break;
-          const event = check(decode(buffer.subarray(4, length + 4)));
-          buffer = buffer.slice(length + 4);
-          if (event) yield event;
-        }
+      }
+      text += decoder.decode();
+      if (text.trim()) { const event = parseSSE(text); if (event) yield event; }
+    } else {
+      for await (const frame of messagePackFrames(reader)) {
+        const event = check(frame);
+        if (event) yield event;
       }
     }
-    if (sse) { text += decoder.decode(); if (text.trim()) { const event = parseSSE(text); if (event) yield event; } }
-    else if (buffer.length) throw new Error("Truncated MessagePack frame");
     if (finals.size !== count) throw new Error("The stream ended before all final images arrived.");
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }

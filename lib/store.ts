@@ -34,7 +34,9 @@ import type { StyleImportCandidate } from "@/lib/style-import";
 import type { StylePreset } from "@/lib/style-presets";
 import { loadStyleLibrary, saveStyleLibrary, loadReferenceSession, saveReferenceSession } from "@/lib/db/style-library";
 import { rememberEncoding, vibeEncoding, MAX_VIBES } from "@/lib/nai/vibes";
+import { isCompactLayout } from "@/lib/use-compact-layout";
 import {
+  GALLERY_PAGE_SIZE,
   loadImages,
   saveImages,
   getGalleryReport,
@@ -45,6 +47,10 @@ import {
 } from "@/lib/db/gallery";
 
 export type SettingsTab = "basic" | "advanced";
+
+// History entries carry the full image and any input references in its recipe.
+const COMPACT_HISTORY_SIZE = 8;
+const historyPageSize = () => isCompactLayout() ? COMPACT_HISTORY_SIZE : GALLERY_PAGE_SIZE;
 
 type RestoreSettingsOptions = {
   message?: string;
@@ -376,7 +382,7 @@ export const useStore = create<Store>()((set, get) => ({
     set({ galleryStatus: "loading", galleryError: null, galleryRevision: revision, galleryLoadingMore: false });
     try {
       const report = await getGalleryReport();
-      const page = await loadImages();
+      const page = await loadImages(undefined, historyPageSize());
       if (get().galleryRevision !== revision) return;
       get().applyGalleryReport(report);
       set({ images: page.images, galleryNext: page.next, galleryStatus: "ready" });
@@ -391,7 +397,7 @@ export const useStore = create<Store>()((set, get) => ({
     if (galleryNext === null || galleryLoadingMore) return;
     set({ galleryLoadingMore: true });
     try {
-      const page = await loadImages(galleryNext);
+      const page = await loadImages(galleryNext, historyPageSize());
       if (get().galleryRevision !== galleryRevision) return;
       set(s => ({ images: [...s.images, ...page.images.filter(image => !s.images.some(existing => existing.id === image.id))], galleryNext: page.next }));
     } catch (e) { toast.error(translateUI("Couldn't load more history: {0}", String(e))); }
@@ -412,9 +418,21 @@ export const useStore = create<Store>()((set, get) => ({
     }
     set(s => {
       const images = [...saved.slice().reverse(), ...s.images.filter(image => (image.id ?? 0) >= 0)];
-      const oldestLoaded = Math.min(...images.filter(image => (image.id ?? 0) > 0).map(image => image.id!));
+      // Keep the boundary batch intact. Older saved entries stay pageable from IndexedDB.
+      let galleryNext = s.galleryNext;
+      if (isCompactLayout() && images.length > COMPACT_HISTORY_SIZE && (saved[0]?.id ?? 0) > 0) {
+        let end = COMPACT_HISTORY_SIZE;
+        while (end < images.length && images[end].batchId === images[end - 1].batchId) end++;
+        if (end < images.length) {
+          images.length = end;
+          galleryNext = images[end - 1].id!;
+        }
+      }
       // Generation can finish while the initial history read is still pending.
-      const galleryNext = s.galleryNext ?? (Number.isFinite(oldestLoaded) && s.galleryCount > images.filter(image => (image.id ?? 0) > 0).length ? oldestLoaded : null);
+      if (galleryNext === null) {
+        const persistedIds = images.map(image => image.id!).filter(id => id > 0);
+        if (persistedIds.length && s.galleryCount > persistedIds.length) galleryNext = Math.min(...persistedIds);
+      }
       return { images, galleryNext, galleryStatus: "ready", galleryRevision: s.galleryRevision + 1, galleryLoadingMore: false };
     });
     return saved;
@@ -626,7 +644,7 @@ export const useStore = create<Store>()((set, get) => ({
       if (!checkAnlasBalance(cost, get().account)) return;
       if (get().preferences.confirmPaid && cost > 0 &&
           ((!get().paidAcknowledged && approved === undefined) || (approved !== undefined && cost > approved.cost))) {
-        set({ pendingPayment: { settings: structuredClone(settings), cost, client } });
+        set({ pendingPayment: { settings, cost, client } });
         return;
       }
       set({ paidAcknowledged: cost > 0 });
@@ -637,14 +655,14 @@ export const useStore = create<Store>()((set, get) => ({
     const preview = get().preferences.streamPreview;
     const n = Math.max(1, settings.nSamples);
     const canCancelGeneration = preview && supportsStreaming(settings.model);
-    const compactLayout = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+    const compactLayout = isCompactLayout();
     // Deliberately does NOT clear selectedBatch/selectedImage: the success path below overwrites
     // them anyway, and keeping them means a failed run leaves the user's previous image intact
     // instead of dumping them on the first-run empty state.
     set({
       isGenerating: true,
       enhancement: null,
-      runSettings: structuredClone(settings),
+      runSettings: settings,
       runPreview: preview,
       lastError: null,
       abortRequested: false,
@@ -701,7 +719,7 @@ export const useStore = create<Store>()((set, get) => ({
     };
 
     try {
-      const { seed, streaming, events } = await client.generate(settings, preview);
+      const { seed, streaming, events } = await client.generate(settings, preview, compactLayout ? 500 : 0);
       baseSeed = seed;
 
       for await (const ev of events) {
@@ -765,7 +783,7 @@ export const useStore = create<Store>()((set, get) => ({
         // the very thing that survived.
         toast.error(translateUI("Run failed — kept {0} finished image{1}", rescued.length, rescued.length > 1 ? "s" : ""));
       } else {
-        set({ lastError: { message, at: Date.now(), settings: structuredClone(settings) } });
+        set({ lastError: { message, at: Date.now(), settings } });
         toast.error(translateUI("Generation failed: {0}", message));
       }
     } finally {
@@ -947,8 +965,10 @@ if (typeof window !== "undefined") {
 
 // One acknowledgement per paid episode. Any return to a known 0-point setup re-arms it,
 // whether caused by a form edit, recipe restore, or refreshed account allowance.
-useStore.subscribe((s) => {
+useStore.subscribe((s, prev) => {
   if (!s.paidAcknowledged) return;
+  if (prev.paidAcknowledged && s.settings === prev.settings && s.enhancement === prev.enhancement &&
+      s.client === prev.client && s.account === prev.account) return;
   const settings = activeGenerationSettings(s.settings, s.enhancement);
   if (estimateCost(settings, s.account, s.client?.uncachedVibes(settings) ?? settings.vibe.filter(ref => !vibeEncoding(ref, settings.model)).length).total === 0) {
     useStore.setState({ paidAcknowledged: false });

@@ -72,6 +72,17 @@ test("MessagePack streams survive split headers/bodies, multiple samples and dup
   assert.deepEqual(events.map(e => e.event_type), ["intermediate", "final", "final"]);
   assert.equal(events[0].image.toDataURL(), new Image(png).toDataURL());
 });
+test("preview throttling displays each sample and always delivers its final image", async t => {
+  const events = [0, 1, 0, 1].map((sample, step) => ({ ...final(sample), event_type: "intermediate", step_ix: step }));
+  const bytes = concat(...[...events, final(0), final(1)].map(frame));
+  t.mock.method(globalThis, "fetch", async () => streamed(bytes));
+  const handle = await new NaiClient(conn).generate(settings({ nSamples: 2 }), true, Infinity);
+  const received = await collect(handle.events);
+  assert.deepEqual(received.map(e => [e.event_type, e.samp_ix, e.step_ix]), [
+    ["intermediate", 0, 0], ["intermediate", 1, 1], ["final", 0, 28], ["final", 1, 28],
+  ]);
+});
+
 test("SSE handles CRLF boundaries, trailing record and base64", async () => {
   const value = JSON.stringify({ ...final(), image: btoa(String.fromCharCode(...png)) });
   const events = await collect(decodeStream(streamed(utf(`: keepalive\r\n\r\nevent: final\r\ndata: ${value}`), "text/event-stream", 1), 1));
@@ -108,6 +119,27 @@ test("client encodes V4 vibes once per model/image/extraction and sends cached e
   for (let i = 0; i < 2; i++) await collect((await client.generate(s)).events);
   assert.equal(bodies.filter(c => c.path.endsWith("encode-vibe")).length, 1);
   assert.deepEqual((bodies[1].body.parameters as Record<string,unknown>).reference_image_multiple, ["AQID"]);
+});
+test("Vibe quotes deduplicate raw originals by content and extraction, and encoding receives full originals", async t => {
+  const source = "QUJD".repeat(128 * 1024);
+  const ref = { base64: source, preview: "data:image/png;base64,dGh1bWI=", informationExtracted: 1, strength: 0.6 };
+  const s = settings({ model: Model.V4_5, vibe: [ref, { ...ref, strength: 0.1 }, { ...ref, informationExtracted: 0.5 }] });
+  const client = new NaiClient(conn);
+  const extractions: number[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    if (url.endsWith("encode-vibe")) {
+      const body = JSON.parse(String(init.body));
+      assert.equal(body.image, source);
+      extractions.push(body.information_extracted);
+      return new Response(new Uint8Array([1, 2, 3]));
+    }
+    return streamed(frame(final()));
+  });
+  assert.equal(client.uncachedVibes(s), 2);
+  await collect((await client.generate(s)).events);
+  assert.deepEqual(extractions, [1, 0.5]);
+  assert.equal(client.uncachedVibes(structuredClone(s)), 0);
+  assert.equal(client.uncachedVibes({ ...s, model: Model.V4_CUR }), 2);
 });
 test("Vibe normalization sends an explicit toggle only for supported active Vibes without changing strengths", async (t) => {
   const bodies: Record<string, unknown>[] = [];

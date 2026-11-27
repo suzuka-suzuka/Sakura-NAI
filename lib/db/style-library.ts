@@ -15,7 +15,7 @@ async function access<T>(key: string, value?: T): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction("data", value === undefined ? "readonly" : "readwrite");
     const store = tx.objectStore("data");
-    const request = value === undefined ? store.get(key) : store.put(structuredClone(value), key);
+    const request = value === undefined ? store.get(key) : store.put(value, key);
     tx.oncomplete = () => { db.close(); resolve(value === undefined ? request.result as T | undefined : value); };
     tx.onabort = tx.onerror = () => { db.close(); reject(tx.error ?? request.error); };
   });
